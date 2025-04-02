@@ -1,0 +1,64 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+*.obj
+*.exe
+*.pdb
+*.ipch
+*.aps
+*.ncb
+*.ilk
+*.suo
+*.user
+*.cache
+*.log
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+
+# Build folders
+Debug/
+Release/
+x64/
+x86/
+ARM/
+ARM64/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# VS Code (falls du es nutzt)
+.vscode/
+
+# Visual Studio allgemein
+.vs/
+
+# NuGet
+packages/
+*.nupkg
+# NuGet Paketcache
+.nuget/
+
+# Others
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+
+# Backup files
+*~
+*.bak
+*.old
+*.orig
+*.swp
+
+# Crash dumps
+*.dmp

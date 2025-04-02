@@ -1,0 +1,13 @@
+ Datentr„ger in Laufwerk D: ist Daten
+ Volumeseriennummer: 325C-423F
+
+ Verzeichnis von D:\devel\GLStudio\lib
+
+12.07.2023  16:37         1.299.396 Bullet3Collision_Debug.lib
+12.07.2023  16:35           113.172 Bullet3Common_Debug.lib
+12.07.2023  16:37         1.072.172 Bullet3Dynamics_Debug.lib
+12.07.2023  16:37           467.424 Bullet3Geometry_Debug.lib
+12.07.2023  16:35        12.906.888 BulletCollision_Debug.lib
+12.07.2023  16:35         8.671.610 BulletDynamics_Debug.lib
+               6 Datei(en),     24.530.662 Bytes
+               0 Verzeichnis(se), 935.991.791.616 Bytes frei
