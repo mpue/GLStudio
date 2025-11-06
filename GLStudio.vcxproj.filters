@@ -612,6 +612,15 @@
     <ClCompile Include="src\PointLight.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="src\VoxelChunk.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="src\VoxelWorld.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="src\VoxelCharacterController.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\glad\glad.h">
@@ -2762,6 +2771,18 @@
     <ClInclude Include="src\PointLight.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="src\Perlin.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VoxelChunk.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VoxelWorld.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VoxelCharacterController.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl">
@@ -3196,6 +3217,8 @@
     <None Include="include\assimp\vector3.inl">
       <Filter>Headerdateien</Filter>
     </None>
+    <None Include="docs\VoxelSystem.md" />
+    <None Include="docs\VoxelCharacterController.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\CMakeLists.txt" />

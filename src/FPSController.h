@@ -18,7 +18,7 @@ private:
     GLFWwindow* window;
 
     float moveSpeed = 5.0f;
-    float jumpStrength = 20.0f;
+    float jumpStrength = 10.0f;
 
     glm::vec3 forward, right, up;
     bool isGrounded();

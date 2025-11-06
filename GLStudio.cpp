@@ -18,7 +18,9 @@
 #include "imgui_impl_opengl3.h"
 
 #include "PhysicsWorld.h"
-
+#include "Perlin.h"
+#include "VoxelWorld.h"
+#include "VoxelCharacterController.h"
 
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -52,7 +54,45 @@ bool navigate_mouse = false;
 PhysicsWorld* world;
 Model* model;
 
-FPSController fpsController;
+VoxelWorld* voxelWorld;
+VoxelCharacterController* characterController;
+
+void createTerrainLandscape(PhysicsWorld* world, int size, float scale, float heightMultiplier) {
+	Perlin perlin;
+
+	for (int x = -size; x < size; x++) {
+		for (int z = -size; z < size; z++) {
+			float y = perlin.noise3D((float)x * scale, 0.0f, (float)z * scale) * heightMultiplier;
+			world->CreateStaticBoxBody((float)x, y - 2.5f, (float)z, 1.0f);
+		}
+	}
+}
+
+void createVoxelTerrain(VoxelWorld* voxelWorld, int size, float scale, float heightMultiplier) {
+	Perlin perlin;
+
+	for (int x = -size; x < size; x++) {
+		for (int z = -size; z < size; z++) {
+			float height = perlin.noise3D((float)x * scale, 0.0f, (float)z * scale) * heightMultiplier;
+			int maxY = static_cast<int>(height);
+			
+			// Generiere Terrain-Schichten
+			for (int y = -5; y <= maxY; y++) {
+				BlockType blockType;
+				
+				if (y == maxY && maxY > 0) {
+					blockType = BlockType::Grass; // Oberste Schicht: Gras
+				} else if (y > maxY - 3 && y < maxY) {
+					blockType = BlockType::Dirt; // Erd-Schichten
+				} else {
+					blockType = BlockType::Stone; // Tiefe Schichten: Stein
+				}
+				
+				voxelWorld->setBlock(x, y, z, blockType);
+			}
+		}
+	}
+}
 
 int main()
 {
@@ -110,14 +150,13 @@ int main()
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
-
 	bool show_demo_window = true;
-
 
 	// configure global opengl state
 	// -----------------------------
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
+	glCullFace(GL_FRONT);
 
 	// build and compile shaders
 	// -------------------------
@@ -161,20 +200,46 @@ int main()
 	world = new PhysicsWorld();
 	world->Init();
 
-	world->CreateBoxBody(1, 1, 1, 1, 0, 0, 0, 0);
-	world->CreateBoxBody(2, 2, 1, 1, 0, 0, 0, 0);
+	//world->CreateBoxBody(1, 1, 1, 1, 0, 0, 0, 0);
+	//world->CreateBoxBody(2, 2, 1, 1, 0, 0, 0, 0);
+
+	// create a perlin noise landscape using boxes and perlin noise 3D
+
+	Perlin perlin;
+
+	int size = 30;
+
+	// createTerrainLandscape(world, size, 0.1f, 5.0f);
+	
+	// Initialisiere Voxel-Welt
+	voxelWorld = new VoxelWorld();
+	
+	// Erstelle Voxel-Terrain (Alternative zur Physics-Welt)
+	createVoxelTerrain(voxelWorld, 16, 0.1f, 8.0f);
+	
+	// Beispiel: Erstelle eine kleine Test-Struktur
+	for (int x = 0; x < 8; x++) {
+		for (int z = 0; z < 8; z++) {
+			voxelWorld->setBlock(x, 0, z, BlockType::Grass);
+			voxelWorld->setBlock(x, -1, z, BlockType::Dirt);
+			voxelWorld->setBlock(x, -2, z, BlockType::Stone);
+		}
+	}
+	
+	// Aktualisiere alle Chunk-Meshes
+	voxelWorld->updateAllChunks();
 
 
 	// lighting info
 	// -------------
-	glm::vec3 lightPos(0.0f, 0.0f, 0.0f);
+	glm::vec3 lightPos(10.0f, 10.0f, 10.0f);
 
 	float near_plane = 1.0f;
 	float far_plane = 25.0f;
 
 	Camera camera;
-	fpsController = FPSController(world->dynamicsWorld, window);
-
+	// Initialisiere Voxel Character Controller
+	characterController = new VoxelCharacterController(voxelWorld, window);
 
 	// render loop
 	// -----------
@@ -194,10 +259,11 @@ int main()
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		world->Tick(deltaTime);
-
+		// Update Character Controller
+		characterController->update(deltaTime);
+		
 		// move light position over time
-		lightPos.z = static_cast<float>(sin(glfwGetTime() * 0.5) * 3.0);
+		// lightPos.z = static_cast<float>(sin(glfwGetTime() * 0.5) * 3.0);
 
 		// render
 		// ------
@@ -232,6 +298,13 @@ int main()
 		// -------------------------
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		
+		// Update Kamera basierend auf Character Controller (ZUERST!)
+		camera.Position = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f); // Augenhöhe
+		camera.Front = characterController->getFront();
+		camera.Up = characterController->getUp();
+		camera.Zoom = 45.0f;
+		
 		shader.use();
 		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 		glm::mat4 view = camera.GetViewMatrix();
@@ -248,9 +321,14 @@ int main()
 		glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap);
 		renderScene(shader);
 
-		fpsController.update(deltaTime);
-		camera.AttachToController(fpsController);
-	
+		// Render Voxel-Welt (mit Identitäts-Model-Matrix)
+		if (voxelWorld) {
+			shader.use();
+			glm::mat4 model = glm::mat4(1.0f); // Identitätsmatrix
+			shader.setMat4("model", model);
+			voxelWorld->render();
+		}
+
 		ImGui::Begin("Settings");
 
 
@@ -282,6 +360,21 @@ int main()
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 
+	// Cleanup
+	if (characterController) {
+		delete characterController;
+		characterController = nullptr;
+	}
+	
+	if (voxelWorld) {
+		delete voxelWorld;
+		voxelWorld = nullptr;
+	}
+	
+	if (world) {
+		delete world;
+		world = nullptr;
+	}
 
 	glfwTerminate();
 	return 0;
@@ -447,8 +540,12 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 	static double lastX = xpos, lastY = ypos;
 	double dx = xpos - lastX;
 	double dy = ypos - lastY;
-	lastX = xpos; lastY = ypos;
-	fpsController.onMouseMove(dx, dy);
+	lastX = xpos; 
+	lastY = ypos;
+	
+	if (characterController) {
+		characterController->onMouseMove(dx, dy);
+	}
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
@@ -471,7 +568,7 @@ unsigned int loadTexture(char const* path)
 		else if (nrComponents == 3)
 			format = GL_RGB;
 		else if (nrComponents == 4)
-			format = GL_RGBA;
+		format = GL_RGBA;
 
 		glBindTexture(GL_TEXTURE_2D, textureID);
 		glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
@@ -501,11 +598,35 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		navigate_mouse = false;
 
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-		btTransform trans;
-		fpsController.body->getMotionState()->getWorldTransform(trans);
-		btVector3 pos = trans.getOrigin();
-		world->CreateStaticBoxBody(pos.x()+camera.Front.x, pos.y(), pos.z()+camera.Front.z, 0.25f);
+		// Platziere Block in Voxel-Welt
+		if (voxelWorld && characterController) {
+			glm::vec3 pos = characterController->getPosition();
+			glm::vec3 front = characterController->getFront();
+			
+			glm::vec3 blockPos = pos + front * 3.0f;
+			voxelWorld->setBlock(
+				static_cast<int>(std::round(blockPos.x)),
+				static_cast<int>(std::round(blockPos.y)),
+				static_cast<int>(std::round(blockPos.z)),
+				BlockType::Stone
+			);
+		}
 	}
-
+	
+	// Mittelklick: Block entfernen
+	if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+		if (voxelWorld && characterController) {
+			glm::vec3 pos = characterController->getPosition();
+			glm::vec3 front = characterController->getFront();
+			
+			glm::vec3 blockPos = pos + front * 3.0f;
+			voxelWorld->setBlock(
+				static_cast<int>(std::round(blockPos.x)),
+				static_cast<int>(std::round(blockPos.y)),
+				static_cast<int>(std::round(blockPos.z)),
+				BlockType::Air
+			);
+		}
+	}
 }
 

@@ -332,6 +332,9 @@
     <ClCompile Include="src\LinearMath\TaskScheduler\btThreadSupportPosix.cpp" />
     <ClCompile Include="src\LinearMath\TaskScheduler\btThreadSupportWin32.cpp" />
     <ClCompile Include="src\PointLight.cpp" />
+    <ClCompile Include="src\VoxelCharacterController.cpp" />
+    <ClCompile Include="src\VoxelChunk.cpp" />
+    <ClCompile Include="src\VoxelWorld.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\assimp\aabb.h" />
@@ -1049,9 +1052,15 @@
     <ClInclude Include="src\LinearMath\btTransformUtil.h" />
     <ClInclude Include="src\LinearMath\btVector3.h" />
     <ClInclude Include="src\LinearMath\TaskScheduler\btThreadSupportInterface.h" />
+    <ClInclude Include="src\Perlin.h" />
     <ClInclude Include="src\PointLight.h" />
+    <ClInclude Include="src\VoxelCharacterController.h" />
+    <ClInclude Include="src\VoxelChunk.h" />
+    <ClInclude Include="src\VoxelWorld.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="docs\VoxelCharacterController.md" />
+    <None Include="docs\VoxelSystem.md" />
     <None Include="include\assimp\color4.inl" />
     <None Include="include\assimp\material.inl" />
     <None Include="include\assimp\matrix3x3.inl" />
