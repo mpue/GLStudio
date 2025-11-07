@@ -12,6 +12,7 @@
 
 #include <iostream>
 #include <filesystem>
+#include <thread>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -235,6 +236,7 @@ int main()
 	config.heightMultiplier = 20.0f;  // Höhere Berge
 	config.minHeight = -10;  // Tiefere Täler
 	config.generateCaves = false;  // Höhlen vorerst deaktiviert für Performance
+	config.numThreads = std::thread::hardware_concurrency(); // Nutze alle CPU-Kerne
 	
 	// Progress-Callback für UI-Updates
 	auto progressCallback = [](float progress, const std::string& message) {
@@ -243,8 +245,8 @@ int main()
 		std::cout << "Terrain: " << (int)(progress * 100) << "% - " << message << std::endl;
 	};
 	
-	// Generiere Terrain (gebatched für bessere Performance)
-	terrainGenerator->generateTerrainBatched(voxelWorld, config, progressCallback, 512);
+	// Generiere Terrain PARALLEL (viel schneller!)
+	terrainGenerator->generateTerrainParallel(voxelWorld, config, progressCallback);
 	
 	terrainGenerationInProgress = false;
 	terrainGenerated = true;

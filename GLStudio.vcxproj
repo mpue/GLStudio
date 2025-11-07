@@ -1065,9 +1065,12 @@
   <ItemGroup>
     <None Include=".gitignore" />
     <None Include="docs\BlockOutline.md" />
+    <None Include="docs\MeshUpdatePerformanceFix.md" />
+    <None Include="docs\ParallelTerrainGeneration.md" />
     <None Include="docs\PerformanceOptimierung.md" />
     <None Include="docs\TerrainGenerator.md" />
     <None Include="docs\TextureAtlas.md" />
+    <None Include="docs\ThreadOptimization.md" />
     <None Include="docs\VoxelCharacterController.md" />
     <None Include="docs\VoxelLighting.md" />
     <None Include="docs\VoxelSystem.md" />
