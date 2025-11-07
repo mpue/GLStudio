@@ -230,12 +230,12 @@ int main()
 	terrainGenerationInProgress = true;
 	
 	TerrainConfig config;
-	config.sizeX = 128;  // 128 Blöcke in X-Richtung (64 auf jeder Seite)
-	config.sizeZ = 128;  // 128 Blöcke in Z-Richtung
-	config.scale = 0.03f;  // Größere Features
-	config.heightMultiplier = 20.0f;  // Höhere Berge
-	config.minHeight = -10;  // Tiefere Täler
-	config.generateCaves = false;  // Höhlen vorerst deaktiviert für Performance
+	config.sizeX = 256;  // 128 Blöcke in X-Richtung (64 auf jeder Seite)
+	config.sizeZ = 256;  // 128 Blöcke in Z-Richtung
+	config.scale = 0.3f;  // Größere Features
+	config.heightMultiplier = 30.0f;  // Höhere Berge
+	config.minHeight = -20;  // Tiefere Täler
+	config.generateCaves = true;  // Höhlen vorerst deaktiviert für Performance
 	config.numThreads = std::thread::hardware_concurrency(); // Nutze alle CPU-Kerne
 	
 	// Progress-Callback für UI-Updates
@@ -411,21 +411,36 @@ int main()
 		
 		ImGui::Separator();
 		ImGui::Text("Block Targeting");
-		if (hasTargetBlock) {
-			ImGui::Text("Target Block: (%d, %d, %d)", 
-				currentTargetBlock.blockPos.x, 
-				currentTargetBlock.blockPos.y, 
-				currentTargetBlock.blockPos.z);
-			ImGui::Text("Place Position: (%d, %d, %d)", 
-				currentTargetBlock.placePos.x, 
-				currentTargetBlock.placePos.y, 
-				currentTargetBlock.placePos.z);
-			ImGui::Text("Distance: %.2f", currentTargetBlock.distance);
-		} else {
-			ImGui::Text("No block targeted");
-		}
+     if (hasTargetBlock) {
+  ImGui::Text("Target Block: (%d, %d, %d)", 
+currentTargetBlock.blockPos.x, 
+                currentTargetBlock.blockPos.y, 
+     currentTargetBlock.blockPos.z);
+            ImGui::Text("Place Position: (%d, %d, %d)", 
+       currentTargetBlock.placePos.x, 
+       currentTargetBlock.placePos.y, 
+         currentTargetBlock.placePos.z);
+            ImGui::Text("Distance: %.2f", currentTargetBlock.distance);
+        } else {
+            ImGui::Text("No block targeted");
+        }
+     
+        ImGui::Separator();
+        ImGui::Text("Controls");
+      if (characterController) {
+    if (characterController->isFreeFlyMode()) {
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "FREE FLY MODE ACTIVE");
+  ImGui::Text("Hold RIGHT MOUSE to fly with WASD");
+ImGui::Text("SPACE = Up, SHIFT = Down");
+        ImGui::Text("Press F to disable Free Fly");
+  } else {
+    ImGui::Text("Normal Character Mode");
+    ImGui::Text("WASD = Move, SPACE = Jump");
+    ImGui::Text("Press F to enable Free Fly Mode");
+            }
+        }
 
-		ImGui::End();
+        ImGui::End();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -608,6 +623,26 @@ void renderCube()
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow* window)
 {
+    // Toggle Free Fly Mode mit F-Taste
+    static bool fKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS && !fKeyPressed) {
+    fKeyPressed = true;
+        if (characterController) {
+   characterController->toggleFreeFlyMode();
+    
+          // Cursor-Modus anpassen
+   if (characterController->isFreeFlyMode()) {
+  // Free Fly aktiviert - Cursor sichtbar für UI
+              glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+         } else {
+  // Normal Mode - Cursor versteckt
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+          }
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE) {
+        fKeyPressed = false;
+    }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -623,17 +658,25 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 // -------------------------------------------------------
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
-	float xpos = static_cast<float>(xposIn);
-	float ypos = static_cast<float>(yposIn);
-	static double lastX = xpos, lastY = ypos;
-	double dx = xpos - lastX;
-	double dy = ypos - lastY;
-	lastX = xpos; 
-	lastY = ypos;
-	
-	if (characterController) {
-		characterController->onMouseMove(dx, dy);
-	}
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+    static double lastX = xpos, lastY = ypos;
+    double dx = xpos - lastX;
+    double dy = ypos - lastY;
+    lastX = xpos; 
+    lastY = ypos;
+    
+if (characterController) {
+        // Im Free Fly Modus nur bei gedrückter rechter Maustaste
+if (characterController->isFreeFlyMode()) {
+   if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+    characterController->onMouseMove(dx, dy);
+      }
+} else {
+  // Normal Mode - immer aktiv
+      characterController->onMouseMove(dx, dy);
+  }
+    }
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)

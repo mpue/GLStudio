@@ -1,6 +1,7 @@
 #include "VoxelCharacterController.h"
 #include "VoxelWorld.h"
 #include "VoxelChunk.h"
+#include <iostream>
 #include <cmath>
 #include <algorithm>
 
@@ -22,6 +23,9 @@ VoxelCharacterController::VoxelCharacterController(VoxelWorld* world, GLFWwindow
     , gravity(-20.0f)
     , isOnGround(false)
     , isJumping(false)
+    , freeFlyMode(false)
+    , freeFlyActive(false)
+    , flySpeed(15.0f)
 {
     updateVectors();
 }
@@ -43,6 +47,11 @@ newFront.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
 }
 
 void VoxelCharacterController::onMouseMove(double dx, double dy) {
+    // Im Free Fly Modus nur bei gedrückter rechter Maustaste rotieren
+    if (freeFlyMode && !freeFlyActive) {
+        return; // Keine Mausbewegung wenn Free Fly inaktiv
+    }
+    
     yaw += static_cast<float>(dx) * mouseSensitivity;
     pitch -= static_cast<float>(dy) * mouseSensitivity;
     
@@ -119,156 +128,201 @@ void VoxelCharacterController::processKeyboard(float deltaTime) {
     glm::vec3 frontHorizontal = glm::normalize(glm::vec3(front.x, 0.0f, front.z));
     glm::vec3 rightHorizontal = glm::normalize(glm::vec3(right.x, 0.0f, right.z));
     
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+ if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
         movement += frontHorizontal;
     }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
         movement -= frontHorizontal;
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        movement -= rightHorizontal;
+      movement -= rightHorizontal;
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
         movement += rightHorizontal;
     }
     
- // Normalisiere Bewegung wenn diagonal
+    // Normalisiere Bewegung wenn diagonal
     if (glm::length(movement) > 0.0f) {
-        movement = glm::normalize(movement) * moveSpeed * deltaTime;
-    }
+     movement = glm::normalize(movement) * moveSpeed * deltaTime;
+  }
     
     // Springen
- if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && isOnGround && !isJumping) {
-        jump();
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && isOnGround && !isJumping) {
+    jump();
     }
     
-  // VERBESSERTE HORIZONTALE BEWEGUNG MIT SLIDING
+    // VERBESSERTE HORIZONTALE BEWEGUNG MIT SLIDING
     if (glm::length(movement) > 0.0f) {
-  glm::vec3 targetPos = position + movement;
+        glm::vec3 targetPos = position + movement;
         
-  // Versuche volle Bewegung
+        // Versuche volle Bewegung
         glm::vec3 testPos = position;
         testPos.x = targetPos.x;
-        testPos.z = targetPos.z;
+  testPos.z = targetPos.z;
         
         if (!checkCollision(testPos)) {
-    // Volle Bewegung möglich
-        position.x = targetPos.x;
-            position.z = targetPos.z;
-   } else {
-    // SLIDING: Versuche Bewegung in X und Z getrennt (ermöglicht entlang Wänden zu gleiten)
+        // Volle Bewegung möglich
+     position.x = targetPos.x;
+    position.z = targetPos.z;
+  } else {
+        // SLIDING: Versuche Bewegung in X und Z getrennt (ermöglicht entlang Wänden zu gleiten)
             
-          // Versuche nur X-Bewegung
-        testPos = position;
-   testPos.x = targetPos.x;
+            // Versuche nur X-Bewegung
+          testPos = position;
+         testPos.x = targetPos.x;
             if (!checkCollision(testPos)) {
-        position.x = targetPos.x;
+            position.x = targetPos.x;
             }
-            
-    // Versuche nur Z-Bewegung
-       testPos = position;
-      testPos.z = targetPos.z;
-         if (!checkCollision(testPos)) {
-       position.z = targetPos.z;
-     }
+       
+        // Versuche nur Z-Bewegung
+            testPos = position;
+         testPos.z = targetPos.z;
+            if (!checkCollision(testPos)) {
+     position.z = targetPos.z;
+    }
         
             // BONUS: Versuche kleinere Schritte wenn beides blockiert ist
-    if (position.x == testPos.x && position.z == testPos.z) {
-     // Versuche 50% der Bewegung
-    glm::vec3 halfMovement = movement * 0.5f;
+            if (position.x == testPos.x && position.z == testPos.z) {
+       // Versuche 50% der Bewegung
+        glm::vec3 halfMovement = movement * 0.5f;
             testPos = position + halfMovement;
- if (!checkCollision(testPos)) {
- position = testPos;
-                }
+  if (!checkCollision(testPos)) {
+position = testPos;
+           }
             }
-        }
+    }
+    }
+}
+
+void VoxelCharacterController::processFreeFlyMovement(float deltaTime) {
+    glm::vec3 movement(0.0f);
+    
+// 3D-Bewegung in Free Fly Mode
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        movement += front;
+    }
+  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        movement -= front;
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        movement -= right;
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        movement += right;
+    }
+if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+        movement += glm::vec3(0.0f, 1.0f, 0.0f);  // Hoch
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+        movement -= glm::vec3(0.0f, 1.0f, 0.0f);  // Runter
+    }
+    
+    // Normalisiere und wende Geschwindigkeit an
+    if (glm::length(movement) > 0.0f) {
+  movement = glm::normalize(movement) * flySpeed * deltaTime;
+        position += movement;
     }
 }
 
 void VoxelCharacterController::jump() {
     if (isOnGround) {
-        velocity.y = jumpForce;
+  velocity.y = jumpForce;
         isOnGround = false;
-        isJumping = true;
+  isJumping = true;
+    }
+}
+
+void VoxelCharacterController::toggleFreeFlyMode() {
+    freeFlyMode = !freeFlyMode;
+    
+    if (freeFlyMode) {
+        std::cout << "Free Fly Mode AKTIVIERT - Drücke rechte Maustaste zum Fliegen (F zum Deaktivieren)" << std::endl;
+    } else {
+        std::cout << "Free Fly Mode DEAKTIVIERT - Normaler Charakter-Modus" << std::endl;
+        freeFlyActive = false;
     }
 }
 
 void VoxelCharacterController::update(float deltaTime) {
+    // Im Free Fly Modus: Prüfe ob rechte Maustaste gedrückt ist
+    if (freeFlyMode) {
+        freeFlyActive = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+      
+        if (freeFlyActive) {
+// Free Fly aktiv - fliege frei herum
+            processFreeFlyMovement(deltaTime);
+            return; // Keine Gravity/Kollision im Free Fly
+        } else {
+ // Free Fly inaktiv - keine Bewegung, aber auch keine Gravity
+     return;
+      }
+    }
+    
+    // Normaler Charakter-Modus (wie vorher)
     processKeyboard(deltaTime);
     
     // Gravitation
-  velocity.y += gravity * deltaTime;
+    velocity.y += gravity * deltaTime;
     
     // Aktualisiere vertikale Position
     glm::vec3 newPos = position;
     newPos.y += velocity.y * deltaTime;
 
-    // Prüfe Boden-Kollision mit mehreren Punkten für stabilere Detection
     int footBlockY = static_cast<int>(std::floor(newPos.y));
     int footBlockX = static_cast<int>(std::round(newPos.x));
     int footBlockZ = static_cast<int>(std::round(newPos.z));
     
-    // Prüfe ob auf dem Boden
     if (velocity.y <= 0.0f) {
-        // Prüfe mehrere Punkte unter dem Spieler für stabilere Kollision
-  bool onGround = false;
-   float groundY = newPos.y;
+        bool onGround = false;
+        float groundY = newPos.y;
         
-        // Prüfe Zentrum und 4 Punkte am Rand des Radius
-     std::vector<glm::vec2> checkPoints = {
-       glm::vec2(0.0f, 0.0f),       // Zentrum
-          glm::vec2(radius * 0.7f, 0.0f),     // Rechts
-       glm::vec2(-radius * 0.7f, 0.0f),    // Links
-            glm::vec2(0.0f, radius * 0.7f),     // Vorne
-     glm::vec2(0.0f, -radius * 0.7f)     // Hinten
-        };
- 
-    for (const auto& offset : checkPoints) {
+        std::vector<glm::vec2> checkPoints = {
+         glm::vec2(0.0f, 0.0f),
+    glm::vec2(radius * 0.7f, 0.0f),
+            glm::vec2(-radius * 0.7f, 0.0f),
+glm::vec2(0.0f, radius * 0.7f),
+         glm::vec2(0.0f, -radius * 0.7f)
+   };
+      
+        for (const auto& offset : checkPoints) {
        int checkX = static_cast<int>(std::round(newPos.x + offset.x));
-     int checkZ = static_cast<int>(std::round(newPos.z + offset.y));
-     
-        if (isBlockSolid(checkX, footBlockY, checkZ)) {
-            onGround = true;
-     groundY = std::max(groundY, static_cast<float>(footBlockY + 1));
-  }
-        }
-  
-        if (onGround) {
-        // Auf Boden - aber erlaube kleine Stufen (max 0.5 Blöcke hoch)
-            float stepHeight = 0.5f;
-   if (groundY - position.y <= stepHeight) {
-       position.y = groundY;
-                velocity.y = 0.0f;
-   isOnGround = true;
-     isJumping = false;
-     } else {
-  // Zu hohe Stufe - normale Gravity
-   position.y = newPos.y;
- isOnGround = false;
-      }
- } else {
-       // In der Luft
-  position.y = newPos.y;
-    isOnGround = false;
+       int checkZ = static_cast<int>(std::round(newPos.z + offset.y));
+         
+   if (isBlockSolid(checkX, footBlockY, checkZ)) {
+  onGround = true;
+       groundY = std::max(groundY, static_cast<float>(footBlockY + 1));
+          }
      }
+        
+     if (onGround) {
+ float stepHeight = 0.5f;
+         if (groundY - position.y <= stepHeight) {
+         position.y = groundY;
+                velocity.y = 0.0f;
+           isOnGround = true;
+        isJumping = false;
+   } else {
+      position.y = newPos.y;
+                isOnGround = false;
+          }
     } else {
-   // Steigt nach oben
-        // Prüfe Decken-Kollision
+   position.y = newPos.y;
+         isOnGround = false;
+        }
+    } else {
         int headBlockY = static_cast<int>(std::ceil(newPos.y + height));
- 
+        
     if (isBlockSolid(footBlockX, headBlockY, footBlockZ)) {
-     // Kopf stößt an Decke
-      velocity.y = 0.0f;
-  position.y = headBlockY - height - 0.01f;
+            velocity.y = 0.0f;
+ position.y = headBlockY - height - 0.01f;
         } else {
- position.y = newPos.y;
+     position.y = newPos.y;
        isOnGround = false;
         }
     }
     
-    // Verhindere Fallen ins Void
     if (position.y < -50.0f) {
-    position.y = 20.0f;
-   velocity.y = 0.0f;
+        position.y = 20.0f;
+        velocity.y = 0.0f;
     }
 }

@@ -22,6 +22,11 @@ public:
   
     // Movement
     void jump();
+    
+    // Free Fly Mode
+    void toggleFreeFlyMode();
+    bool isFreeFlyMode() const { return freeFlyMode; }
+    bool isFreeFlyActive() const { return freeFlyMode && freeFlyActive; }
 
 private:
     VoxelWorld* voxelWorld;
@@ -37,10 +42,10 @@ private:
     // Kamera-Rotation
     float yaw;
     float pitch;
-    
+ 
     // Character-Eigenschaften
-    float height;          // Höhe des Charakters
-    float radius;   // Radius für Kollision
+    float height;
+    float radius;
     float moveSpeed;
     float mouseSensitivity;
     float jumpForce;
@@ -50,8 +55,14 @@ private:
     bool isOnGround;
     bool isJumping;
     
+    // Free Fly Mode
+    bool freeFlyMode;
+    bool freeFlyActive;
+    float flySpeed;
+    
     // Hilfsfunktionen
     void processKeyboard(float deltaTime);
+    void processFreeFlyMovement(float deltaTime);
     void updateVectors();
     bool checkCollision(const glm::vec3& newPos);
     bool isBlockSolid(int x, int y, int z);
