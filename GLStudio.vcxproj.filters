@@ -609,9 +609,6 @@
     <ClCompile Include="src\FPSController.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="src\PointLight.cpp">
-      <Filter>Quelldateien</Filter>
-    </ClCompile>
     <ClCompile Include="src\VoxelChunk.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
@@ -2768,9 +2765,6 @@
     <ClInclude Include="src\FPSController.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
-    <ClInclude Include="src\PointLight.h">
-      <Filter>Headerdateien</Filter>
-    </ClInclude>
     <ClInclude Include="src\Perlin.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
@@ -3219,8 +3213,19 @@
     </None>
     <None Include="docs\VoxelSystem.md" />
     <None Include="docs\VoxelCharacterController.md" />
+    <None Include=".gitignore" />
+    <None Include="shaders\voxel.vert" />
+    <None Include="shaders\voxel.frag" />
+    <None Include="docs\VoxelLighting.md" />
+    <None Include="docs\TextureAtlas.md" />
+    <None Include="docs\PerformanceOptimierung.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="resources\textures\atlas.png">
+      <Filter>Ressourcendateien</Filter>
+    </Image>
   </ItemGroup>
 </Project>

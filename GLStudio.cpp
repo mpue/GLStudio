@@ -22,7 +22,6 @@
 #include "VoxelWorld.h"
 #include "VoxelCharacterController.h"
 
-
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
@@ -36,8 +35,6 @@ void renderCube();
 // settings
 const unsigned int SCR_WIDTH = 3440;
 const unsigned int SCR_HEIGHT = 1440;
-bool shadows = true;
-bool shadowsKeyPressed = false;
 
 // camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -56,6 +53,11 @@ Model* model;
 
 VoxelWorld* voxelWorld;
 VoxelCharacterController* characterController;
+
+// Voxel lighting settings
+glm::vec3 sunDirection = glm::normalize(glm::vec3(0.5f, -1.0f, 0.3f)); // Sonne scheint schräg von oben
+glm::vec3 sunColor = glm::vec3(1.0f, 0.95f, 0.8f);  // Warmes Sonnenlicht
+glm::vec3 ambientColor = glm::vec3(0.3f, 0.35f, 0.4f); // Bläuliches Umgebungslicht
 
 void createTerrainLandscape(PhysicsWorld* world, int size, float scale, float heightMultiplier) {
 	Perlin perlin;
@@ -155,24 +157,25 @@ int main()
 	// configure global opengl state
 	// -----------------------------
 	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_FRONT);
+	// glEnable(GL_CULL_FACE);
+	// glCullFace(GL_BACK); // Voxel-System verwendet Back-Face Culling
 
 	// build and compile shaders
 	// -------------------------
-	Shader shader("shaders/point_shadow.vert", "shaders/point_shadow.frag");
+	Shader voxelShader("shaders/voxel.vert", "shaders/voxel.frag");
+	Shader physicsShader("shaders/point_shadow.vert", "shaders/point_shadow.frag");
 	Shader simpleDepthShader("shaders/ps_depth.vert", "shaders/ps_depth.frag", "shaders/ps_depth.geom");
 
 	// load textures
 	// -------------
 	unsigned int woodTexture = loadTexture("resources/textures/wood.png");
+	unsigned int voxelAtlasTexture = loadTexture("resources/textures/atlas.png");
 
-	// configure depth map FBO
+	// configure depth map FBO (für Physics-Objekte, falls noch verwendet)
 	// -----------------------
 	const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
 	unsigned int depthMapFBO;
 	glGenFramebuffers(1, &depthMapFBO);
-	// create depth cubemap texture
 	unsigned int depthCubemap;
 	glGenTextures(1, &depthCubemap);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap);
@@ -183,38 +186,25 @@ int main()
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	// attach depth texture as FBO's depth buffer
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthCubemap, 0);
 	glDrawBuffer(GL_NONE);
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-
 	// shader configuration
 	// --------------------
-	shader.use();
-	shader.setInt("diffuseTexture", 0);
-	shader.setInt("depthMap", 1);
+	physicsShader.use();
+	physicsShader.setInt("diffuseTexture", 0);
+	physicsShader.setInt("depthMap", 1);
 
 	world = new PhysicsWorld();
 	world->Init();
 
-	//world->CreateBoxBody(1, 1, 1, 1, 0, 0, 0, 0);
-	//world->CreateBoxBody(2, 2, 1, 1, 0, 0, 0, 0);
-
-	// create a perlin noise landscape using boxes and perlin noise 3D
-
-	Perlin perlin;
-
-	int size = 30;
-
-	// createTerrainLandscape(world, size, 0.1f, 5.0f);
-	
 	// Initialisiere Voxel-Welt
 	voxelWorld = new VoxelWorld();
 	
-	// Erstelle Voxel-Terrain (Alternative zur Physics-Welt)
+	// Erstelle Voxel-Terrain
 	createVoxelTerrain(voxelWorld, 16, 0.1f, 8.0f);
 	
 	// Beispiel: Erstelle eine kleine Test-Struktur
@@ -229,15 +219,11 @@ int main()
 	// Aktualisiere alle Chunk-Meshes
 	voxelWorld->updateAllChunks();
 
-
-	// lighting info
-	// -------------
+	// lighting info (für Physics-Objekte)
 	glm::vec3 lightPos(10.0f, 10.0f, 10.0f);
-
 	float near_plane = 1.0f;
 	float far_plane = 25.0f;
 
-	Camera camera;
 	// Initialisiere Voxel Character Controller
 	characterController = new VoxelCharacterController(voxelWorld, window);
 
@@ -261,28 +247,50 @@ int main()
 
 		// Update Character Controller
 		characterController->update(deltaTime);
-		
-		// move light position over time
-		// lightPos.z = static_cast<float>(sin(glfwGetTime() * 0.5) * 3.0);
 
 		// render
 		// ------
-		glClearColor(0.5f, 0.5f, 0.8f, 1.0f);
+		glClearColor(0.5f, 0.5f, 0.8f, 1.0f); // Sky color
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// 0. create depth cubemap transformation matrices
-		// -----------------------------------------------
+		// Update Kamera basierend auf Character Controller
+		camera.Position = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+		camera.Front = characterController->getFront();
+		camera.Up = characterController->getUp();
+		camera.Zoom = 45.0f;
+
+		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 500.0f);
+		glm::mat4 view = camera.GetViewMatrix();
+
+		// === Render Voxel-Welt mit voxel-spezifischem Shader ===
+		if (voxelWorld) {
+			voxelShader.use();
+			voxelShader.setMat4("projection", projection);
+			voxelShader.setMat4("view", view);
+			voxelShader.setMat4("model", glm::mat4(1.0f));
+			
+			// Voxel Lighting Uniforms
+			voxelShader.setVec3("sunDirection", sunDirection);
+			voxelShader.setVec3("sunColor", sunColor);
+			voxelShader.setVec3("ambientColor", ambientColor);
+			voxelShader.setVec3("viewPos", camera.Position);
+			
+			// Bind Voxel Atlas Texture
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, voxelAtlasTexture);
+			voxelShader.setInt("diffuseTexture", 0);
+			
+			voxelWorld->render();
+		}
+
+		// === Optional: Render Physics-Objekte mit Schatten (falls noch benötigt) ===
+		// Shadow-Rendering auskommentiert, da nicht mehr für Voxel benötigt
+		/*
 		glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT, near_plane, far_plane);
 		std::vector<glm::mat4> shadowTransforms;
 		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f)));
+		// ... weitere shadow transforms ...
 
-		// 1. render scene to depth cubemap
-		// --------------------------------
 		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 		glClear(GL_DEPTH_BUFFER_BIT);
@@ -294,66 +302,37 @@ int main()
 		renderScene(simpleDepthShader);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		// 2. render scene as normal 
-		// -------------------------
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		
-		// Update Kamera basierend auf Character Controller (ZUERST!)
-		camera.Position = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f); // Augenhöhe
-		camera.Front = characterController->getFront();
-		camera.Up = characterController->getUp();
-		camera.Zoom = 45.0f;
-		
-		shader.use();
-		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-		glm::mat4 view = camera.GetViewMatrix();
-		shader.setMat4("projection", projection);
-		shader.setMat4("view", view);
-		// set lighting uniforms
-		shader.setVec3("lightPos", lightPos);
-		shader.setVec3("viewPos", camera.Position);
-		shader.setInt("shadows", shadows); // enable/disable shadows by pressing 'SPACE'
-		shader.setFloat("far_plane", far_plane);
+		physicsShader.use();
+		physicsShader.setMat4("projection", projection);
+		physicsShader.setMat4("view", view);
+		physicsShader.setVec3("lightPos", lightPos);
+		physicsShader.setVec3("viewPos", camera.Position);
+		physicsShader.setInt("shadows", true);
+		physicsShader.setFloat("far_plane", far_plane);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, woodTexture);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap);
-		renderScene(shader);
+		renderScene(physicsShader);
+		*/
 
-		// Render Voxel-Welt (mit Identitäts-Model-Matrix)
-		if (voxelWorld) {
-			shader.use();
-			glm::mat4 model = glm::mat4(1.0f); // Identitätsmatrix
-			shader.setMat4("model", model);
-			voxelWorld->render();
+		ImGui::Begin("Voxel Lighting Settings");
+
+		if (ImGui::DragFloat3("Sun Direction", (float*)&sunDirection, 0.01f)) {
+			sunDirection = glm::normalize(sunDirection);
 		}
 
-		ImGui::Begin("Settings");
-
-
-		if (ImGui::DragFloat3("Light position", (float*)&lightPos)) {
-
-		}
-
-		if (ImGui::DragFloat("Near plane", &near_plane)) {
-
-		}
-
-		if (ImGui::DragFloat("Far plane", &far_plane)) {
-
-		}
+		ImGui::ColorEdit3("Sun Color", (float*)&sunColor);
+		ImGui::ColorEdit3("Ambient Color", (float*)&ambientColor);
 
 		ImGui::End();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-		// -------------------------------------------------------------------------------
 		glfwSwapBuffers(window);
 		glfwPollEvents();
-
 	}
 
 	ImGui_ImplOpenGL3_Shutdown();

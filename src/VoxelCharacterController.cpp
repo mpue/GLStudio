@@ -7,16 +7,16 @@
 VoxelCharacterController::VoxelCharacterController(VoxelWorld* world, GLFWwindow* window)
     : voxelWorld(world)
     , window(window)
-  , position(0.0f, 10.0f, 0.0f)
+    , position(0.0f, 10.0f, 0.0f)
     , velocity(0.0f)
     , front(0.0f, 0.0f, -1.0f)
     , up(0.0f, 1.0f, 0.0f)
     , right(1.0f, 0.0f, 0.0f)
-  , yaw(-90.0f)
+    , yaw(-90.0f)
     , pitch(0.0f)
     , height(1.8f)
-    , radius(0.3f)
-    , moveSpeed(5.0f)
+    , radius(0.25f)  // Reduziert von 0.3 auf 0.25 für weniger Hängenbleiben
+    , moveSpeed(6.0f)  // Erhöht von 5.0 auf 6.0 für flüssigere Bewegung
     , mouseSensitivity(0.1f)
     , jumpForce(8.0f)
     , gravity(-20.0f)
@@ -59,22 +59,25 @@ bool VoxelCharacterController::isBlockSolid(int x, int y, int z) {
 }
 
 bool VoxelCharacterController::checkCollision(const glm::vec3& newPos) {
-    // Prüfe Blöcke um die Charakterposition
-    int minX = static_cast<int>(std::floor(newPos.x - radius));
-    int maxX = static_cast<int>(std::ceil(newPos.x + radius));
-    int minY = static_cast<int>(std::floor(newPos.y));
-    int maxY = static_cast<int>(std::ceil(newPos.y + height));
-    int minZ = static_cast<int>(std::floor(newPos.z - radius));
-    int maxZ = static_cast<int>(std::ceil(newPos.z + radius));
+    // Prüfe Blöcke um die Charakterposition mit kleinerer, präziserer Collision Box
+// Reduziere radius leicht für weniger "Hängenbleiben"
+    float effectiveRadius = radius * 0.9f;  // 10% kleiner für glattere Bewegung
+    
+    int minX = static_cast<int>(std::floor(newPos.x - effectiveRadius));
+    int maxX = static_cast<int>(std::ceil(newPos.x + effectiveRadius));
+    int minY = static_cast<int>(std::floor(newPos.y + 0.1f));  // Kleine Toleranz am Boden
+    int maxY = static_cast<int>(std::ceil(newPos.y + height - 0.1f));  // Kleine Toleranz an der Decke
+    int minZ = static_cast<int>(std::floor(newPos.z - effectiveRadius));
+    int maxZ = static_cast<int>(std::ceil(newPos.z + effectiveRadius));
     
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
-            for (int z = minZ; z <= maxZ; ++z) {
-                if (isBlockSolid(x, y, z)) {
-                return true;
-          }
-         }
-      }
+   for (int z = minZ; z <= maxZ; ++z) {
+        if (isBlockSolid(x, y, z)) {
+    return true;
+    }
+  }
+   }
     }
     
     return false;
@@ -120,7 +123,7 @@ void VoxelCharacterController::processKeyboard(float deltaTime) {
         movement += frontHorizontal;
     }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
- movement -= frontHorizontal;
+        movement -= frontHorizontal;
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
         movement -= rightHorizontal;
@@ -131,38 +134,53 @@ void VoxelCharacterController::processKeyboard(float deltaTime) {
     
  // Normalisiere Bewegung wenn diagonal
     if (glm::length(movement) > 0.0f) {
- movement = glm::normalize(movement) * moveSpeed * deltaTime;
+        movement = glm::normalize(movement) * moveSpeed * deltaTime;
     }
     
- // Springen
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && isOnGround && !isJumping) {
+    // Springen
+ if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && isOnGround && !isJumping) {
         jump();
     }
     
-    // Aktualisiere Position horizontal
+  // VERBESSERTE HORIZONTALE BEWEGUNG MIT SLIDING
     if (glm::length(movement) > 0.0f) {
-        glm::vec3 newPos = position + movement;
+  glm::vec3 targetPos = position + movement;
         
-     // Prüfe Kollision nur horizontal
-        glm::vec3 testPos = newPos;
-        testPos.y = position.y; // Behalte Y-Position für Test
-
+  // Versuche volle Bewegung
+        glm::vec3 testPos = position;
+        testPos.x = targetPos.x;
+        testPos.z = targetPos.z;
+        
         if (!checkCollision(testPos)) {
-         position.x = newPos.x;
-         position.z = newPos.z;
- } else {
-     // Versuche Bewegung in X und Z einzeln
- testPos = position;
-         testPos.x = newPos.x;
-            if (!checkCollision(testPos)) {
-          position.x = newPos.x;
-  }
+    // Volle Bewegung möglich
+        position.x = targetPos.x;
+            position.z = targetPos.z;
+   } else {
+    // SLIDING: Versuche Bewegung in X und Z getrennt (ermöglicht entlang Wänden zu gleiten)
             
-         testPos = position;
-            testPos.z = newPos.z;
+          // Versuche nur X-Bewegung
+        testPos = position;
+   testPos.x = targetPos.x;
+            if (!checkCollision(testPos)) {
+        position.x = targetPos.x;
+            }
+            
+    // Versuche nur Z-Bewegung
+       testPos = position;
+      testPos.z = targetPos.z;
+         if (!checkCollision(testPos)) {
+       position.z = targetPos.z;
+     }
+        
+            // BONUS: Versuche kleinere Schritte wenn beides blockiert ist
+    if (position.x == testPos.x && position.z == testPos.z) {
+     // Versuche 50% der Bewegung
+    glm::vec3 halfMovement = movement * 0.5f;
+            testPos = position + halfMovement;
  if (!checkCollision(testPos)) {
-       position.z = newPos.z;
-   }
+ position = testPos;
+                }
+            }
         }
     }
 }
@@ -185,42 +203,72 @@ void VoxelCharacterController::update(float deltaTime) {
     glm::vec3 newPos = position;
     newPos.y += velocity.y * deltaTime;
 
-    // Prüfe Boden-Kollision
- int footBlockY = static_cast<int>(std::floor(newPos.y));
+    // Prüfe Boden-Kollision mit mehreren Punkten für stabilere Detection
+    int footBlockY = static_cast<int>(std::floor(newPos.y));
     int footBlockX = static_cast<int>(std::round(newPos.x));
     int footBlockZ = static_cast<int>(std::round(newPos.z));
     
     // Prüfe ob auf dem Boden
     if (velocity.y <= 0.0f) {
-        if (isBlockSolid(footBlockX, footBlockY, footBlockZ)) {
-            // Auf Boden
-            position.y = footBlockY + 1.0f;
-      velocity.y = 0.0f;
-     isOnGround = true;
-  isJumping = false;
-        } else {
-            // In der Luft
-     position.y = newPos.y;
-       isOnGround = false;
+        // Prüfe mehrere Punkte unter dem Spieler für stabilere Kollision
+  bool onGround = false;
+   float groundY = newPos.y;
+        
+        // Prüfe Zentrum und 4 Punkte am Rand des Radius
+     std::vector<glm::vec2> checkPoints = {
+       glm::vec2(0.0f, 0.0f),       // Zentrum
+          glm::vec2(radius * 0.7f, 0.0f),     // Rechts
+       glm::vec2(-radius * 0.7f, 0.0f),    // Links
+            glm::vec2(0.0f, radius * 0.7f),     // Vorne
+     glm::vec2(0.0f, -radius * 0.7f)     // Hinten
+        };
+ 
+    for (const auto& offset : checkPoints) {
+       int checkX = static_cast<int>(std::round(newPos.x + offset.x));
+     int checkZ = static_cast<int>(std::round(newPos.z + offset.y));
+     
+        if (isBlockSolid(checkX, footBlockY, checkZ)) {
+            onGround = true;
+     groundY = std::max(groundY, static_cast<float>(footBlockY + 1));
+  }
         }
+  
+        if (onGround) {
+        // Auf Boden - aber erlaube kleine Stufen (max 0.5 Blöcke hoch)
+            float stepHeight = 0.5f;
+   if (groundY - position.y <= stepHeight) {
+       position.y = groundY;
+                velocity.y = 0.0f;
+   isOnGround = true;
+     isJumping = false;
+     } else {
+  // Zu hohe Stufe - normale Gravity
+   position.y = newPos.y;
+ isOnGround = false;
+      }
+ } else {
+       // In der Luft
+  position.y = newPos.y;
+    isOnGround = false;
+     }
     } else {
-        // Steigt nach oben
+   // Steigt nach oben
         // Prüfe Decken-Kollision
         int headBlockY = static_cast<int>(std::ceil(newPos.y + height));
-        
-        if (isBlockSolid(footBlockX, headBlockY, footBlockZ)) {
-            // Kopf stößt an Decke
-            velocity.y = 0.0f;
-      position.y = headBlockY - height - 0.01f;
-   } else {
-          position.y = newPos.y;
-            isOnGround = false;
+ 
+    if (isBlockSolid(footBlockX, headBlockY, footBlockZ)) {
+     // Kopf stößt an Decke
+      velocity.y = 0.0f;
+  position.y = headBlockY - height - 0.01f;
+        } else {
+ position.y = newPos.y;
+       isOnGround = false;
         }
     }
     
     // Verhindere Fallen ins Void
     if (position.y < -50.0f) {
-      position.y = 20.0f;
-        velocity.y = 0.0f;
+    position.y = 20.0f;
+   velocity.y = 0.0f;
     }
 }

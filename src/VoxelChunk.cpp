@@ -157,193 +157,240 @@ atlasX = 7; atlasY = 0;
 }
 
 void VoxelChunk::addFace(FaceDirection direction, int x, int y, int z, BlockType type) {
-    BlockTextures textures = getBlockTextures(type, direction);
+    // 4x4 TEXTUR-ATLAS SYSTEM (256x256px, 64x64px pro Tile)
+    // Atlas Layout (Beispiel):
+    // [0,0] [1,0] [2,0] [3,0]  <- Reihe 0
+    // [0,1] [1,1] [2,1] [3,1]  <- Reihe 1 (SEITEN-TEXTUR)
+    // [0,2] [1,2] [2,2] [3,2]  <- Reihe 2
+    // [0,3] [1,3] [2,3] [3,3]  <- Reihe 3
     
- // Berechne Weltposition
-  float worldX = static_cast<float>(chunkPosition.x * CHUNK_SIZE + x);
-    float worldY = static_cast<float>(chunkPosition.y * CHUNK_SIZE + y);
+    // Bestimme Atlas-Position basierend auf BlockType und Face
+    int atlasX = 0;
+    int atlasY = 0;
+    
+  // Seiten-Faces (North, South, East, West) bekommen immer erste Textur aus Reihe 1
+    bool isSideFace = (direction == FaceDirection::North || 
+            direction == FaceDirection::South ||
+   direction == FaceDirection::East || 
+         direction == FaceDirection::West);
+    
+    if (isSideFace) {
+        // Seiten: Erste Textur aus Reihe 1 -> [0, 1]
+        atlasX = 0;
+        atlasY = 1;
+    } else {
+ // Top und Bottom: Unterschiedliche Texturen je nach BlockType
+    switch (type) {
+    case BlockType::Grass:
+  if (direction == FaceDirection::Top) {
+  atlasX = 0; atlasY = 0;  // Gras-Top: [0,0]
+   } else {
+                    atlasX = 1; atlasY = 0;  // Gras-Bottom (Erde): [1,0]
+      }
+      break;
+     case BlockType::Stone:
+  atlasX = 2; atlasY = 0;  // Stein: [2,0]
+  break;
+          case BlockType::Dirt:
+     atlasX = 1; atlasY = 0;  // Erde: [1,0]
+      break;
+         case BlockType::Wood:
+         if (direction == FaceDirection::Top || direction == FaceDirection::Bottom) {
+       atlasX = 3; atlasY = 0;  // Holz-Ringe: [3,0]
+        } else {
+       atlasX = 0; atlasY = 1;  // Holz-Rinde: [0,1] (wie Seiten)
+     }
+break;
+  case BlockType::Sand:
+           atlasX = 0; atlasY = 2;  // Sand: [0,2]
+         break;
+   case BlockType::Water:
+  atlasX = 1; atlasY = 2;  // Wasser: [1,2]
+         break;
+       default:
+    atlasX = 2; atlasY = 0;  // Default: Stein
+        break;
+        }
+    }
+    
+    // Berechne UV-Koordinaten für das Tile im Atlas
+    float tileSize = 1.0f / ATLAS_SIZE;  // 0.25 für 4x4
+    float uMin = atlasX * tileSize;
+    float vMin = atlasY * tileSize;
+    float uMax = uMin + tileSize;
+    float vMax = vMin + tileSize;
+    
+    // Berechne Weltposition
+    float worldX = static_cast<float>(chunkPosition.x * CHUNK_SIZE + x);
+  float worldY = static_cast<float>(chunkPosition.y * CHUNK_SIZE + y);
     float worldZ = static_cast<float>(chunkPosition.z * CHUNK_SIZE + z);
- 
+  
     unsigned int baseIndex = static_cast<unsigned int>(vertices.size() / 8);
-    
-    glm::vec2 uvMin, uvMax;
+  
     glm::vec3 normal;
     
     // Vertex-Positionen und UVs basierend auf der Richtung
     switch (direction) {
-    case FaceDirection::Top: // +Y
-    uvMin = textures.top[0];
-      uvMax = textures.top[1];
-         normal = glm::vec3(0, -1, 0);  // Invertiert: war (0, 1, 0)
-    
-            // Vertex 0: (-0.5, 0.5, -0.5)
-        // Format: x,y,z, nx,ny,nz, u,v
-          vertices.insert(vertices.end(), {
-   worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
-   normal.x, normal.y, normal.z,
-    uvMin.x, uvMax.y
-     });
-            // Vertex 1: (0.5, 0.5, -0.5)
-         vertices.insert(vertices.end(), {
-  worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
-           normal.x, normal.y, normal.z,
- uvMax.x, uvMax.y
-    });
-       // Vertex 2: (0.5, 0.5, 0.5)
-     vertices.insert(vertices.end(), {
-       worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
-  normal.x, normal.y, normal.z,
-    uvMax.x, uvMin.y
- });
-     // Vertex 3: (-0.5, 0.5, 0.5)
-   vertices.insert(vertices.end(), {
-           worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
-     normal.x, normal.y, normal.z,
-          uvMin.x, uvMin.y
-     });
- break;
-  
-        case FaceDirection::Bottom: // -Y
-    uvMin = textures.bottom[0];
-          uvMax = textures.bottom[1];
-  normal = glm::vec3(0, 1, 0);  // Invertiert: war (0, -1, 0)
-   
-  vertices.insert(vertices.end(), {
- worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
-        normal.x, normal.y, normal.z,
-     uvMin.x, uvMin.y
-            });
- vertices.insert(vertices.end(), {
-    worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
-       normal.x, normal.y, normal.z,
-    uvMax.x, uvMin.y
-   });
-            vertices.insert(vertices.end(), {
-        worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
-   normal.x, normal.y, normal.z,
-      uvMax.x, uvMax.y
-            });
+ case FaceDirection::Top: // +Y
+        normal = glm::vec3(0, 1, 0); // GEÄNDERT: Nach außen (oben)
+     
+        // Vertex 0: (-0.5, 0.5, -0.5)
         vertices.insert(vertices.end(), {
-     worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
-         normal.x, normal.y, normal.z,
- uvMin.x, uvMax.y
-            });
- break;
-    
-case FaceDirection::North: // +Z
-      uvMin = textures.north[0];
-    uvMax = textures.north[1];
- normal = glm::vec3(0, 0, -1);  // Invertiert: war (0, 0, 1)
-   
-   vertices.insert(vertices.end(), {
- worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
-   normal.x, normal.y, normal.z,
-     uvMin.x, uvMax.y
-   });
-vertices.insert(vertices.end(), {
-          worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
+     worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
         normal.x, normal.y, normal.z,
-             uvMin.x, uvMin.y
-     });
-     vertices.insert(vertices.end(), {
+         uMin, vMax
+        });
+   // Vertex 1: (0.5, 0.5, -0.5)
+        vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
+            normal.x, normal.y, normal.z,
+      uMax, vMax
+    });
+        // Vertex 2: (0.5, 0.5, 0.5)
+   vertices.insert(vertices.end(), {
       worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
-         normal.x, normal.y, normal.z,
-     uvMax.x, uvMin.y
-         });
+          normal.x, normal.y, normal.z,
+        uMax, vMin
+     });
+    // Vertex 3: (-0.5, 0.5, 0.5)
       vertices.insert(vertices.end(), {
-    worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
-     normal.x, normal.y, normal.z,
-     uvMax.x, uvMax.y
-       });
-     break;
- 
-  case FaceDirection::South: // -Z
- uvMin = textures.south[0];
-         uvMax = textures.south[1];
-     normal = glm::vec3(0, 0, 1);  // Invertiert: war (0, 0, -1)
-   
-            vertices.insert(vertices.end(), {
+            worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
+        normal.x, normal.y, normal.z,
+        uMin, vMin
+        });
+break;
+  
+    case FaceDirection::Bottom: // -Y
+   normal = glm::vec3(0, -1, 0); // GEÄNDERT: Nach außen (unten)
+        
+        vertices.insert(vertices.end(), {
+            worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
+       normal.x, normal.y, normal.z,
+            uMin, vMin
+        });
+        vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
+            normal.x, normal.y, normal.z,
+            uMax, vMin
+      });
+    vertices.insert(vertices.end(), {
        worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
-    normal.x, normal.y, normal.z,
-           uvMin.x, uvMax.y
-       });
-      vertices.insert(vertices.end(), {
- worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
-normal.x, normal.y, normal.z,
-    uvMin.x, uvMin.y
+            normal.x, normal.y, normal.z,
+      uMax, vMax
+        });
+        vertices.insert(vertices.end(), {
+  worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
+       normal.x, normal.y, normal.z,
+            uMin, vMax
+        });
+        break;
+    
+    case FaceDirection::North: // +Z
+        normal = glm::vec3(0, 0, 1); // GEÄNDERT: Nach außen (nord)
+    
+        vertices.insert(vertices.end(), {
+          worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
+         normal.x, normal.y, normal.z,
+       uMin, vMax
+        });
+        vertices.insert(vertices.end(), {
+            worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
+            normal.x, normal.y, normal.z,
+uMin, vMin
+        });
+        vertices.insert(vertices.end(), {
+      worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
+ normal.x, normal.y, normal.z,
+ uMax, vMin
+        });
+        vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
+            normal.x, normal.y, normal.z,
+    uMax, vMax
+        });
+        break;
+ 
+    case FaceDirection::South: // -Z
+        normal = glm::vec3(0, 0, -1); // GEÄNDERT: Nach außen (süd)
+      
+   vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
+   normal.x, normal.y, normal.z,
+            uMin, vMax
  });
- vertices.insert(vertices.end(), {
-       worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
-      normal.x, normal.y, normal.z,
-         uvMax.x, uvMin.y
-    });
-     vertices.insert(vertices.end(), {
-           worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
-           normal.x, normal.y, normal.z,
-    uvMax.x, uvMax.y
-    });
-            break;
+        vertices.insert(vertices.end(), {
+      worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
+   normal.x, normal.y, normal.z,
+ uMin, vMin
+   });
+        vertices.insert(vertices.end(), {
+        worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
+        normal.x, normal.y, normal.z,
+            uMax, vMin
+        });
+        vertices.insert(vertices.end(), {
+            worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
+    normal.x, normal.y, normal.z,
+  uMax, vMax
+        });
+        break;
    
-  case FaceDirection::East: // +X
-   uvMin = textures.east[0];
-uvMax = textures.east[1];
-        normal = glm::vec3(-1, 0, 0);  // Invertiert: war (1, 0, 0)
+    case FaceDirection::East: // +X
+        normal = glm::vec3(1, 0, 0); // GEÄNDERT: Nach außen (ost)
+    
+     vertices.insert(vertices.end(), {
+   worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
+            normal.x, normal.y, normal.z,
+        uMin, vMax
+ });
+        vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
+            normal.x, normal.y, normal.z,
+      uMin, vMin
+        });
+    vertices.insert(vertices.end(), {
+      worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
+  normal.x, normal.y, normal.z,
+       uMax, vMin
+   });
+        vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
+            normal.x, normal.y, normal.z,
+      uMax, vMax
+        });
+        break;
+   
+    case FaceDirection::West: // -X
+        normal = glm::vec3(-1, 0, 0); // GEÄNDERT: Nach außen (west)
   
         vertices.insert(vertices.end(), {
-  worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
-    normal.x, normal.y, normal.z,
-       uvMin.x, uvMax.y
-         });
-  vertices.insert(vertices.end(), {
- worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
-        normal.x, normal.y, normal.z,
- uvMin.x, uvMin.y
-  });
-         vertices.insert(vertices.end(), {
-  worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
+        worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
    normal.x, normal.y, normal.z,
-          uvMax.x, uvMin.y
+            uMin, vMax
+ });
+        vertices.insert(vertices.end(), {
+        worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
+            normal.x, normal.y, normal.z,
+      uMin, vMin
       });
-          vertices.insert(vertices.end(), {
-        worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
- normal.x, normal.y, normal.z,
- uvMax.x, uvMax.y
-            });
-   break;
-       
-  case FaceDirection::West: // -X
-            uvMin = textures.west[0];
-          uvMax = textures.west[1];
-      normal = glm::vec3(1, 0, 0);  // Invertiert: war (-1, 0, 0)
- 
-  vertices.insert(vertices.end(), {
-                worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
-    normal.x, normal.y, normal.z,
-          uvMin.x, uvMax.y
-         });
-            vertices.insert(vertices.end(), {
-  worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
-     normal.x, normal.y, normal.z,
-        uvMin.x, uvMin.y
-    });
-            vertices.insert(vertices.end(), {
-     worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
-  normal.x, normal.y, normal.z,
-            uvMax.x, uvMin.y
-   });
-       vertices.insert(vertices.end(), {
-        worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
-        normal.x, normal.y, normal.z,
-       uvMax.x, uvMax.y
-    });
-    break;
+        vertices.insert(vertices.end(), {
+      worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
+            normal.x, normal.y, normal.z,
+     uMax, vMin
+        });
+        vertices.insert(vertices.end(), {
+     worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
+            normal.x, normal.y, normal.z,
+    uMax, vMax
+  });
+        break;
     }
  
     // Füge Indices für zwei Dreiecke hinzu (Quad)
     indices.insert(indices.end(), {
-        baseIndex, baseIndex + 1, baseIndex + 2,
- baseIndex, baseIndex + 2, baseIndex + 3
-    });
+   baseIndex, baseIndex + 1, baseIndex + 2,
+   baseIndex, baseIndex + 2, baseIndex + 3
+ });
 }
 
 void VoxelChunk::generateMesh() {

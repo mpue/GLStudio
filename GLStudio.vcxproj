@@ -331,7 +331,6 @@
     <ClCompile Include="src\LinearMath\TaskScheduler\btTaskScheduler.cpp" />
     <ClCompile Include="src\LinearMath\TaskScheduler\btThreadSupportPosix.cpp" />
     <ClCompile Include="src\LinearMath\TaskScheduler\btThreadSupportWin32.cpp" />
-    <ClCompile Include="src\PointLight.cpp" />
     <ClCompile Include="src\VoxelCharacterController.cpp" />
     <ClCompile Include="src\VoxelChunk.cpp" />
     <ClCompile Include="src\VoxelWorld.cpp" />
@@ -1053,13 +1052,16 @@
     <ClInclude Include="src\LinearMath\btVector3.h" />
     <ClInclude Include="src\LinearMath\TaskScheduler\btThreadSupportInterface.h" />
     <ClInclude Include="src\Perlin.h" />
-    <ClInclude Include="src\PointLight.h" />
     <ClInclude Include="src\VoxelCharacterController.h" />
     <ClInclude Include="src\VoxelChunk.h" />
     <ClInclude Include="src\VoxelWorld.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include=".gitignore" />
+    <None Include="docs\PerformanceOptimierung.md" />
+    <None Include="docs\TextureAtlas.md" />
     <None Include="docs\VoxelCharacterController.md" />
+    <None Include="docs\VoxelLighting.md" />
     <None Include="docs\VoxelSystem.md" />
     <None Include="include\assimp\color4.inl" />
     <None Include="include\assimp\material.inl" />
@@ -1205,9 +1207,14 @@
     <None Include="include\glm\gtx\vector_angle.inl" />
     <None Include="include\glm\gtx\vector_query.inl" />
     <None Include="include\glm\gtx\wrap.inl" />
+    <None Include="shaders\voxel.frag" />
+    <None Include="shaders\voxel.vert" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="resources\textures\atlas.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
