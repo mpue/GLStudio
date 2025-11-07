@@ -309,6 +309,7 @@
     <ClCompile Include="src\BulletSoftBody\btSoftRigidCollisionAlgorithm.cpp" />
     <ClCompile Include="src\BulletSoftBody\btSoftRigidDynamicsWorld.cpp" />
     <ClCompile Include="src\BulletSoftBody\btSoftSoftCollisionAlgorithm.cpp" />
+    <ClCompile Include="src\CameraPathRecorder.cpp" />
     <ClCompile Include="src\clew\clew.c" />
     <ClCompile Include="src\FPSController.cpp" />
     <ClCompile Include="src\glad.c" />
@@ -1022,6 +1023,7 @@
     <ClInclude Include="src\BulletSoftBody\btSoftRigidDynamicsWorld.h" />
     <ClInclude Include="src\BulletSoftBody\btSoftSoftCollisionAlgorithm.h" />
     <ClInclude Include="src\BulletSoftBody\btSparseSDF.h" />
+    <ClInclude Include="src\CameraPathRecorder.h" />
     <ClInclude Include="src\clew\clew.h" />
     <ClInclude Include="src\FPSController.h" />
     <ClInclude Include="src\LinearMath\btAabbUtil2.h" />
@@ -1064,7 +1066,13 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
+    <None Include="docs\AdvancedTerrainGeneration.md" />
     <None Include="docs\BlockOutline.md" />
+    <None Include="docs\CameraPathRecorder.md" />
+    <None Include="docs\CameraPathRecorder_Debug.md" />
+    <None Include="docs\CameraPathRecorder_FixSummary.md" />
+    <None Include="docs\CameraPathRecorder_QuickFix.md" />
+    <None Include="docs\CameraPathRecorder_QuickStart.md" />
     <None Include="docs\MeshUpdatePerformanceFix.md" />
     <None Include="docs\ParallelTerrainGeneration.md" />
     <None Include="docs\PerformanceOptimierung.md" />

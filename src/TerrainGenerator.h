@@ -21,6 +21,27 @@ struct TerrainConfig {
     bool generateCaves = false;  // Höhlen generieren
     int seed = 12345;      // Zufalls-Seed für reproduzierbare Welten
     int numThreads = 0;     // Anzahl der Worker-Threads (0 = auto-detect)
+    
+    // NEUE Parameter für mehr Varianz
+    int octaves = 4;      // Anzahl der Noise-Oktaven (mehr = detaillierter)
+    float persistence = 0.5f; // Amplitude-Abnahme pro Oktave (0-1)
+    float lacunarity = 2.0f;           // Frequenz-Zunahme pro Oktave (>1)
+    
+  // Biom-Parameter
+    float continentalnessScale = 0.01f;  // Scale für große Landmassen
+    float erosionScale = 0.03f;          // Scale für Erosion/Rauheit
+    float mountainScale = 0.02f;   // Scale für Berge
+    float mountainThreshold = 0.6f;      // Ab welchem Wert werden Berge generiert
+    float mountainHeightMultiplier = 2.5f; // Zusätzliche Höhe für Berge
+    
+    // Höhlen-Parameter (erweitert)
+    float caveScale = 0.05f;        // Scale für Höhlen-Noise
+    float caveThreshold = 0.55f;  // Schwellwert für Höhlen (höher = weniger Höhlen)
+    int caveMinDepth = 5;// Minimale Tiefe für Höhlen
+    
+    // Terrain-Features
+    bool generateBeaches = true;        // Strände an Wasserlinie
+    int waterLevel = 0;    // Wasser-Höhe
 };
 
 // Struktur für einen Block, der gesetzt werden soll
@@ -50,9 +71,13 @@ public:
     
     // Berechnet die Anzahl der zu generierenden Blöcke
     int calculateTotalBlocks(const TerrainConfig& config) const;
+    
+    // Aktueller Seed (für UI-Anzeige)
+    int getCurrentSeed() const { return currentSeed; }
 
 private:
     Perlin perlin;
+    int currentSeed;
     
     // Thread-sichere Variablen
     std::mutex progressMutex;
@@ -60,8 +85,9 @@ private:
     std::atomic<bool> shouldStop;
     
     // Hilfsfunktionen
-    BlockType getBlockTypeAtHeight(int y, int maxY, float caveValue) const;
-    float getCaveNoise(int x, int y, int z, float scale) const;
+    BlockType getBlockTypeAtHeight(int y, int maxY, float caveValue, bool isMountain, bool isBeach) const;
+    float getCaveNoise(int x, int y, int z, const TerrainConfig& config, Perlin& localPerlin) const;
+    float getTerrainHeight(int x, int z, const TerrainConfig& config, Perlin& localPerlin) const;
     
     // Worker-Thread-Funktion
     void generateTerrainWorker(

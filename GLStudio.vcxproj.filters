@@ -627,6 +627,9 @@
     <ClCompile Include="src\TerrainGenerator.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="src\CameraPathRecorder.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\glad\glad.h">
@@ -2795,6 +2798,9 @@
     <ClInclude Include="src\TerrainGenerator.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="src\CameraPathRecorder.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl">
@@ -3244,6 +3250,12 @@
     <None Include="docs\ParallelTerrainGeneration.md" />
     <None Include="docs\ThreadOptimization.md" />
     <None Include="docs\MeshUpdatePerformanceFix.md" />
+    <None Include="docs\AdvancedTerrainGeneration.md" />
+    <None Include="docs\CameraPathRecorder.md" />
+    <None Include="docs\CameraPathRecorder_QuickStart.md" />
+    <None Include="docs\CameraPathRecorder_Debug.md" />
+    <None Include="docs\CameraPathRecorder_QuickFix.md" />
+    <None Include="docs\CameraPathRecorder_FixSummary.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\CMakeLists.txt" />

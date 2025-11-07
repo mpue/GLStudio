@@ -13,6 +13,8 @@
 #include <iostream>
 #include <filesystem>
 #include <thread>
+#include <mutex>
+#include <atomic>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -25,6 +27,7 @@
 #include "VoxelRaycast.h"
 #include "BlockOutline.h"
 #include "TerrainGenerator.h"
+#include "CameraPathRecorder.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -55,7 +58,10 @@ bool navigate_mouse = false;
 PhysicsWorld* world;
 Model* model;
 
-VoxelWorld* voxelWorld;
+// THREAD-SICHERE VOXELWORLD-VERWALTUNG
+std::mutex voxelWorldMutex;
+std::atomic<VoxelWorld*> voxelWorld{nullptr};
+
 VoxelCharacterController* characterController;
 
 // Voxel lighting settings
@@ -70,12 +76,16 @@ bool hasTargetBlock = false;
 // Block outline renderer
 BlockOutline* blockOutline = nullptr;
 
-// Terrain generation
+// Camera Path Recorder
+CameraPathRecorder* cameraPathRecorder = nullptr;
+
+// Terrain generation - THREAD-SICHER
 TerrainGenerator* terrainGenerator = nullptr;
-float terrainGenerationProgress = 0.0f;
+std::mutex terrainProgressMutex;
+std::atomic<float> terrainGenerationProgress{0.0f};
 std::string terrainGenerationMessage = "";
-bool terrainGenerationInProgress = false;
-bool terrainGenerated = false;
+std::atomic<bool> terrainGenerationInProgress{false};
+std::atomic<bool> terrainGenerated{false};
 
 void createTerrainLandscape(PhysicsWorld* world, int size, float scale, float heightMultiplier) {
 	Perlin perlin;
@@ -220,36 +230,54 @@ int main()
 	world->Init();
 
 	// Initialisiere Voxel-Welt
-	voxelWorld = new VoxelWorld();
+	voxelWorld.store(new VoxelWorld(), std::memory_order_release);
 	
 	// Initialisiere Terrain Generator
 	terrainGenerator = new TerrainGenerator();
 	
 	// NEUES TERRAIN-SYSTEM: Größeres Terrain mit Fortschrittsanzeige
 	std::cout << "Starte Terrain-Generierung..." << std::endl;
-	terrainGenerationInProgress = true;
+	terrainGenerationInProgress.store(true, std::memory_order_release);
 	
 	TerrainConfig config;
-	config.sizeX = 256;  // 128 Blöcke in X-Richtung (64 auf jeder Seite)
-	config.sizeZ = 256;  // 128 Blöcke in Z-Richtung
-	config.scale = 0.3f;  // Größere Features
-	config.heightMultiplier = 30.0f;  // Höhere Berge
-	config.minHeight = -20;  // Tiefere Täler
-	config.generateCaves = true;  // Höhlen vorerst deaktiviert für Performance
-	config.numThreads = std::thread::hardware_concurrency(); // Nutze alle CPU-Kerne
+	config.sizeX = 256;
+	config.sizeZ = 256;
+	config.scale = 0.03f;
+	config.heightMultiplier = 30.0f;
+	config.minHeight = -20;
+	config.generateCaves = true;
+	config.seed = 12345;
+	config.octaves = 4;
+	config.persistence = 0.5f;
+	config.lacunarity = 2.0f;
+	config.continentalnessScale = 0.01f;
+	config.erosionScale = 0.03f;
+	config.mountainScale = 0.02f;
+	config.mountainThreshold = 0.6f;
+	config.mountainHeightMultiplier = 2.5f;
+	config.caveScale = 0.05f;
+	config.caveThreshold = 0.55f;
+	config.caveMinDepth = 5;
+	config.generateBeaches = true;
+	config.waterLevel = 0;
+	config.numThreads = std::thread::hardware_concurrency();
 	
-	// Progress-Callback für UI-Updates
+	// Progress-Callback für UI-Updates - THREAD-SICHER
 	auto progressCallback = [](float progress, const std::string& message) {
-		terrainGenerationProgress = progress;
-		terrainGenerationMessage = message;
+		terrainGenerationProgress.store(progress, std::memory_order_release);
+		{
+			std::lock_guard<std::mutex> lock(terrainProgressMutex);
+			terrainGenerationMessage = message;
+		}
 		std::cout << "Terrain: " << (int)(progress * 100) << "% - " << message << std::endl;
 	};
 	
 	// Generiere Terrain PARALLEL (viel schneller!)
-	terrainGenerator->generateTerrainParallel(voxelWorld, config, progressCallback);
+	VoxelWorld* initialWorld = voxelWorld.load(std::memory_order_acquire);
+	terrainGenerator->generateTerrainParallel(initialWorld, config, progressCallback);
 	
-	terrainGenerationInProgress = false;
-	terrainGenerated = true;
+	terrainGenerationInProgress.store(false, std::memory_order_release);
+	terrainGenerated.store(true, std::memory_order_release);
 	std::cout << "Terrain-Generierung abgeschlossen!" << std::endl;
 	
 	/* ALTE METHODE - Auskommentiert
@@ -275,11 +303,17 @@ int main()
 	float far_plane = 25.0f;
 
 	// Initialisiere Voxel Character Controller
-	characterController = new VoxelCharacterController(voxelWorld, window);
+	VoxelWorld* worldForController = voxelWorld.load(std::memory_order_acquire);
+	characterController = new VoxelCharacterController(worldForController, window);
 	
 	// Initialisiere Block Outline Renderer
 	blockOutline = new BlockOutline();
 	blockOutline->init("shaders/outline.vert", "shaders/outline.frag");
+
+	// Initialisiere Camera Path Recorder
+	cameraPathRecorder = new CameraPathRecorder();
+	cameraPathRecorder->setRecordingRate(30.0f);  // 30 Keyframes pro Sekunde
+	cameraPathRecorder->setLooping(false);
 
 	// render loop
 	// -----------
@@ -299,31 +333,61 @@ int main()
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		// Update Character Controller
-		characterController->update(deltaTime);
+		// Update Character Controller nur wenn NICHT im Playback
+		if (!cameraPathRecorder || !cameraPathRecorder->isPlaying()) {
+			characterController->update(deltaTime);
+		}
 		
-		// Update target block (für Visualisierung)
-		glm::vec3 rayOrigin = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
-		glm::vec3 rayDirection = characterController->getFront();
-		currentTargetBlock = VoxelRaycast::raycast(rayOrigin, rayDirection, 5.0f, voxelWorld);
-		hasTargetBlock = currentTargetBlock.hit;
+		// Update Camera Path Recorder
+		if (cameraPathRecorder) {
+			if (cameraPathRecorder->isRecording() && characterController->isFreeFlyMode()) {
+				// Zeichne Kameraposition auf im Free Fly Modus
+				glm::vec3 camPos = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+				cameraPathRecorder->updateRecording(camPos, characterController->getFront(), characterController->getUp(), deltaTime);
+			}
+			
+			if (cameraPathRecorder->isPlaying()) {
+				// Spiele aufgezeichneten Pfad ab
+				glm::vec3 playbackPos, playbackFront, playbackUp;
+				if (cameraPathRecorder->updatePlayback(playbackPos, playbackFront, playbackUp, deltaTime)) {
+					// Überschreibe Kamera-Position mit Playback-Daten
+					camera.Position = playbackPos;
+					camera.Front = playbackFront;
+					camera.Up = playbackUp;
+				}
+			}
+		}
+
+		// Update target block (für Visualisierung) - THREAD-SICHER
+		VoxelWorld* worldForRaycast = voxelWorld.load(std::memory_order_acquire);
+		if (worldForRaycast && (!cameraPathRecorder || !cameraPathRecorder->isPlaying())) {
+			// Nur Target Block berechnen wenn nicht im Playback
+			glm::vec3 rayOrigin = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+			glm::vec3 rayDirection = characterController->getFront();
+			currentTargetBlock = VoxelRaycast::raycast(rayOrigin, rayDirection, 5.0f, worldForRaycast);
+			hasTargetBlock = currentTargetBlock.hit;
+		}
 
 		// render
 		// ----__
 		glClearColor(0.5f, 0.5f, 0.8f, 1.0f); // Sky color
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// Update Kamera basierend auf Character Controller
-		camera.Position = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
-		camera.Front = characterController->getFront();
-		camera.Up = characterController->getUp();
+		// Überschreibe Kamera nur wenn NICHT im Playback-Modus
+		if (!cameraPathRecorder || !cameraPathRecorder->isPlaying()) {
+			// Update Kamera basierend auf Character Controller
+			camera.Position = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+			camera.Front = characterController->getFront();
+			camera.Up = characterController->getUp();
+		}
 		camera.Zoom = 45.0f;
-
+		
 		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 500.0f);
 		glm::mat4 view = camera.GetViewMatrix();
 
 		// === Render Voxel-Welt mit voxel-spezifischem Shader ===
-		if (voxelWorld) {
+		VoxelWorld* worldForRendering = voxelWorld.load(std::memory_order_acquire);
+		if (worldForRendering) {
 			voxelShader.use();
 			voxelShader.setMat4("projection", projection);
 			voxelShader.setMat4("view", view);
@@ -340,7 +404,7 @@ int main()
 			glBindTexture(GL_TEXTURE_2D, voxelAtlasTexture);
 			voxelShader.setInt("diffuseTexture", 0);
 			
-			voxelWorld->render();
+			worldForRendering->render();
 		}
 		
 		// === Render Block Outlines ===
@@ -397,50 +461,292 @@ int main()
 		ImGui::ColorEdit3("Ambient Color", (float*)&ambientColor);
 		
 		ImGui::Separator();
-		ImGui::Text("Terrain Generation");
-		if (terrainGenerationInProgress) {
-			ImGui::ProgressBar(terrainGenerationProgress, ImVec2(-1, 0));
-			ImGui::Text("%s", terrainGenerationMessage.c_str());
-		} else if (terrainGenerated) {
-			ImGui::Text("Terrain: Complete");
-			if (ImGui::Button("Regenerate Terrain")) {
-				// TODO: Regeneriere Terrain in separatem Thread
-				std::cout << "Terrain-Regenerierung noch nicht implementiert" << std::endl;
+		ImGui::Text("=== Terrain Generation ===");
+		
+		// Terrain Config UI
+		static TerrainConfig uiConfig;
+		static bool configInitialized = false;
+		
+		if (!configInitialized) {
+			// Initialisiere mit Standard-Werten
+			uiConfig.sizeX = 512;
+			uiConfig.sizeZ = 512;
+		 uiConfig.scale = 0.03f;
+		 uiConfig.heightMultiplier = 30.0f;
+		 uiConfig.minHeight = -20;
+		 uiConfig.generateCaves = true;
+		 uiConfig.seed = 12345;
+		 uiConfig.octaves = 4;
+		 uiConfig.persistence = 0.5f;
+		 uiConfig.lacunarity = 2.0f;
+		 uiConfig.continentalnessScale = 0.01f;
+		 uiConfig.erosionScale = 0.03f;
+		 uiConfig.mountainScale = 0.02f;
+		 uiConfig.mountainThreshold = 0.6f;
+		 uiConfig.mountainHeightMultiplier = 2.5f;
+		 uiConfig.caveScale = 0.05f;
+		 uiConfig.caveThreshold = 0.55f;
+		 uiConfig.caveMinDepth = 5;
+		 uiConfig.generateBeaches = true;
+		 uiConfig.waterLevel = 0;
+		 uiConfig.numThreads = std::thread::hardware_concurrency();
+		 configInitialized = true;
+		}
+		
+		if (terrainGenerationInProgress.load(std::memory_order_acquire)) {
+			float progress = terrainGenerationProgress.load(std::memory_order_acquire);
+			ImGui::ProgressBar(progress, ImVec2(-1, 0));
+			
+			std::string message;
+			{
+				std::lock_guard<std::mutex> lock(terrainProgressMutex);
+				message = terrainGenerationMessage;
+			}
+			ImGui::Text("%s", message.c_str());
+		} else {
+			// Terrain-Parameter Collapsing Headers für bessere Übersicht
+			
+			if (ImGui::CollapsingHeader("Basis-Parameter", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::SliderInt("Größe X", &uiConfig.sizeX, 32, 512);
+				ImGui::SliderInt("Größe Z", &uiConfig.sizeZ, 32, 512);
+				ImGui::SliderFloat("Scale", &uiConfig.scale, 0.001f, 0.1f, "%.4f");
+				ImGui::SliderFloat("Höhen-Multiplikator", &uiConfig.heightMultiplier, 5.0f, 100.0f);
+				ImGui::SliderInt("Min-Höhe", &uiConfig.minHeight, -50, 0);
+				ImGui::InputInt("Seed", &uiConfig.seed);
+				if (ImGui::Button("Zufälliger Seed")) {
+					uiConfig.seed = static_cast<int>(time(nullptr));
+				}
+			}
+			
+			if (ImGui::CollapsingHeader("Noise-Parameter")) {
+				ImGui::SliderInt("Oktaven", &uiConfig.octaves, 1, 8);
+				ImGui::SliderFloat("Persistence", &uiConfig.persistence, 0.1f, 1.0f);
+				ImGui::SliderFloat("Lacunarity", &uiConfig.lacunarity, 1.5f, 4.0f);
+			}
+			
+			if (ImGui::CollapsingHeader("Terrain-Features")) {
+				ImGui::SliderFloat("Kontinental-Scale", &uiConfig.continentalnessScale, 0.001f, 0.05f, "%.4f");
+				ImGui::SliderFloat("Erosion-Scale", &uiConfig.erosionScale, 0.01f, 0.1f, "%.4f");
+				ImGui::Text("Berge:");
+				ImGui::SliderFloat("Berg-Scale", &uiConfig.mountainScale, 0.005f, 0.05f, "%.4f");
+				ImGui::SliderFloat("Berg-Schwellwert", &uiConfig.mountainThreshold, 0.3f, 0.9f);
+				ImGui::SliderFloat("Berg-Höhe", &uiConfig.mountainHeightMultiplier, 1.0f, 5.0f);
+			}
+			
+			if (ImGui::CollapsingHeader("Höhlen-Parameter")) {
+				ImGui::Checkbox("Höhlen generieren", &uiConfig.generateCaves);
+				if (uiConfig.generateCaves) {
+					ImGui::SliderFloat("Höhlen-Scale", &uiConfig.caveScale, 0.01f, 0.1f, "%.4f");
+					ImGui::SliderFloat("Höhlen-Schwellwert", &uiConfig.caveThreshold, 0.4f, 0.7f);
+					ImGui::SliderInt("Min-Tiefe", &uiConfig.caveMinDepth, 1, 20);
+				}
+			}
+			
+			if (ImGui::CollapsingHeader("Erweiterte Features")) {
+				ImGui::Checkbox("Strände generieren", &uiConfig.generateBeaches);
+				ImGui::SliderInt("Wasser-Level", &uiConfig.waterLevel, -10, 10);
+				ImGui::SliderInt("Anzahl Threads", &uiConfig.numThreads, 1, 32);
+			}
+			
+			ImGui::Separator();
+			
+			// Preset-Buttons
+			ImGui::Text("Presets:");
+			if (ImGui::Button("Flaches Land")) {
+				uiConfig.heightMultiplier = 10.0f;
+				uiConfig.mountainThreshold = 0.9f;
+			 uiConfig.erosionScale = 0.05f;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Hügelland")) {
+			 uiConfig.heightMultiplier = 25.0f;
+			 uiConfig.mountainThreshold = 0.7f;
+			 uiConfig.mountainHeightMultiplier = 1.5f;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Gebirge")) {
+			 uiConfig.heightMultiplier = 40.0f;
+			 uiConfig.mountainThreshold = 0.5f;
+			 uiConfig.mountainHeightMultiplier = 3.5f;
+			}
+			if (ImGui::Button("Extreme Berge")) {
+			 uiConfig.heightMultiplier = 60.0f;
+			 uiConfig.mountainThreshold = 0.4f;
+			 uiConfig.mountainHeightMultiplier = 5.0f;
+			 uiConfig.octaves = 6;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Inselwelt")) {
+			 uiConfig.continentalnessScale = 0.005f;
+			 uiConfig.heightMultiplier = 20.0f;
+			 uiConfig.waterLevel = 5;
+			 uiConfig.generateBeaches = true;
+			}
+			
+			ImGui::Separator();
+			
+			// Generate Button
+			if (ImGui::Button("Terrain Generieren", ImVec2(-1, 40))) {
+				if (!terrainGenerationInProgress.load(std::memory_order_acquire)) {
+					std::cout << "Starte Terrain-Regenerierung..." << std::endl;
+					terrainGenerationInProgress.store(true, std::memory_order_release);
+					
+					// Kopiere Config für Thread
+					TerrainConfig threadConfig = uiConfig;
+					
+					// Terrain in separatem Thread generieren
+					std::thread([threadConfig]() {
+						// Erstelle NEUE Welt (nicht die alte löschen!)
+						VoxelWorld* newWorld = new VoxelWorld();
+						
+						auto progressCallback = [](float progress, const std::string& message) {
+							terrainGenerationProgress.store(progress, std::memory_order_release);
+							{
+								std::lock_guard<std::mutex> lock(terrainProgressMutex);
+								terrainGenerationMessage = message;
+							}
+						};
+						
+						// Generiere Terrain in der NEUEN Welt
+						terrainGenerator->generateTerrainParallel(newWorld, threadConfig, progressCallback);
+						
+						// ATOMARER Austausch der Welten - SICHER!
+						VoxelWorld* oldWorld = voxelWorld.exchange(newWorld, std::memory_order_acq_rel);
+						
+						// Warte ein bisschen, damit Render-Thread umschaltet
+						std::this_thread::sleep_for(std::chrono::milliseconds(100));
+						
+						// Alte Welt löschen
+						if (oldWorld) {
+							delete oldWorld;
+						}
+						
+						terrainGenerationInProgress.store(false, std::memory_order_release);
+						terrainGenerated.store(true, std::memory_order_release);
+						std::cout << "Terrain-Regenerierung abgeschlossen!" << std::endl;
+					}).detach();
+				}
+			}
+			
+			if (terrainGenerated.load(std::memory_order_acquire)) {
+				ImGui::Text("Aktueller Seed: %d", terrainGenerator->getCurrentSeed());
+			}
+		}
+
+		ImGui::End();
+
+		// === Camera Path Recorder UI ===
+		ImGui::Begin("Camera Path Recorder");
+		
+		if (cameraPathRecorder) {
+			// Status anzeigen
+			ImGui::Text("Status: %s", 
+				cameraPathRecorder->isRecording() ? "Recording" :
+				cameraPathRecorder->isPlaying() ? "Playing" : "Idle");
+			
+			ImGui::Separator();
+			
+			// Recording Controls
+			ImGui::Text("=== Recording ===");
+			
+			if (cameraPathRecorder->isRecording()) {
+				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "REC");
+				ImGui::SameLine();
+				ImGui::Text("Time: %.2f s", cameraPathRecorder->getRecordingDuration());
+				
+				if (ImGui::Button("Stop Recording", ImVec2(-1, 30))) {
+					cameraPathRecorder->stopRecording();
+				}
+			} else {
+				bool canRecord = characterController && characterController->isFreeFlyMode();
+				
+				if (!canRecord) {
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 
+						"Enable Free Fly Mode (F) to record!");
+				}
+				
+				ImGui::BeginDisabled(!canRecord || cameraPathRecorder->isPlaying());
+				if (ImGui::Button("Start Recording", ImVec2(-1, 30))) {
+					cameraPathRecorder->startRecording();
+				}
+				ImGui::EndDisabled();
+			}
+			
+			// Recording Settings
+			static float recordingRate = 30.0f;
+			if (ImGui::SliderFloat("Recording Rate (fps)", &recordingRate, 5.0f, 120.0f)) {
+				cameraPathRecorder->setRecordingRate(recordingRate);
+			}
+			
+			ImGui::Separator();
+			
+			// Playback Controls
+			ImGui::Text("=== Playback ===");
+			
+			ImGui::Text("Keyframes: %d", cameraPathRecorder->getKeyframeCount());
+			ImGui::Text("Duration: %.2f seconds", cameraPathRecorder->getRecordingDuration());
+			
+			if (cameraPathRecorder->isPlaying()) {
+				ImGui::ProgressBar(cameraPathRecorder->getPlaybackProgress(), ImVec2(-1, 0));
+				ImGui::Text("Time: %.2f / %.2f s", 
+					cameraPathRecorder->getPlaybackTime(), 
+					cameraPathRecorder->getRecordingDuration());
+				
+				if (ImGui::Button("Stop Playback", ImVec2(-1, 30))) {
+					cameraPathRecorder->stopPlayback();
+				}
+			} else {
+				bool hasRecording = cameraPathRecorder->getKeyframeCount() > 0;
+				
+				ImGui::BeginDisabled(!hasRecording || cameraPathRecorder->isRecording());
+				if (ImGui::Button("Play", ImVec2(-1, 30))) {
+					cameraPathRecorder->startPlayback();
+				}
+				ImGui::EndDisabled();
+			}
+			
+			// Playback Settings
+			static float playbackSpeed = 1.0f;
+			if (ImGui::SliderFloat("Playback Speed", &playbackSpeed, 0.1f, 5.0f, "%.2fx")) {
+				cameraPathRecorder->setPlaybackSpeed(playbackSpeed);
+			}
+			
+			static bool looping = false;
+			if (ImGui::Checkbox("Loop Playback", &looping)) {
+				cameraPathRecorder->setLooping(looping);
+			}
+			
+			ImGui::Separator();
+			
+			// File Operations
+			ImGui::Text("=== File Operations ===");
+			
+			static char pathFilename[256] = "camera_path.bin";
+			ImGui::InputText("Filename", pathFilename, sizeof(pathFilename));
+			
+			if (ImGui::Button("Save Path", ImVec2(-1, 0))) {
+				cameraPathRecorder->savePath(pathFilename);
+			}
+			
+			if (ImGui::Button("Load Path", ImVec2(-1, 0))) {
+				cameraPathRecorder->loadPath(pathFilename);
+			}
+			
+			ImGui::BeginDisabled(cameraPathRecorder->isRecording() || cameraPathRecorder->isPlaying());
+			if (ImGui::Button("Clear Recording", ImVec2(-1, 0))) {
+				cameraPathRecorder->clearRecording();
+			}
+			ImGui::EndDisabled();
+			
+			ImGui::Separator();
+			
+			// Info
+			if (ImGui::Button("Print Info to Console", ImVec2(-1, 0))) {
+			 cameraPathRecorder->printInfo();
 			}
 		}
 		
-		ImGui::Separator();
-		ImGui::Text("Block Targeting");
-     if (hasTargetBlock) {
-  ImGui::Text("Target Block: (%d, %d, %d)", 
-currentTargetBlock.blockPos.x, 
-                currentTargetBlock.blockPos.y, 
-     currentTargetBlock.blockPos.z);
-            ImGui::Text("Place Position: (%d, %d, %d)", 
-       currentTargetBlock.placePos.x, 
-       currentTargetBlock.placePos.y, 
-         currentTargetBlock.placePos.z);
-            ImGui::Text("Distance: %.2f", currentTargetBlock.distance);
-        } else {
-            ImGui::Text("No block targeted");
-        }
-     
-        ImGui::Separator();
-        ImGui::Text("Controls");
-      if (characterController) {
-    if (characterController->isFreeFlyMode()) {
-  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "FREE FLY MODE ACTIVE");
-  ImGui::Text("Hold RIGHT MOUSE to fly with WASD");
-ImGui::Text("SPACE = Up, SHIFT = Down");
-        ImGui::Text("Press F to disable Free Fly");
-  } else {
-    ImGui::Text("Normal Character Mode");
-    ImGui::Text("WASD = Move, SPACE = Jump");
-    ImGui::Text("Press F to enable Free Fly Mode");
-            }
-        }
-
-        ImGui::End();
+		ImGui::End();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -459,6 +765,11 @@ ImGui::Text("SPACE = Up, SHIFT = Down");
 		terrainGenerator = nullptr;
 	}
 	
+	if (cameraPathRecorder) {
+		delete cameraPathRecorder;
+		cameraPathRecorder = nullptr;
+	}
+	
 	if (blockOutline) {
 		delete blockOutline;
 		blockOutline = nullptr;
@@ -469,9 +780,9 @@ ImGui::Text("SPACE = Up, SHIFT = Down");
 		characterController = nullptr;
 	}
 	
-	if (voxelWorld) {
-		delete voxelWorld;
-		voxelWorld = nullptr;
+	VoxelWorld* worldForCleanup = voxelWorld.exchange(nullptr, std::memory_order_acq_rel);
+	if (worldForCleanup) {
+		delete worldForCleanup;
 	}
 	
 	if (world) {
@@ -730,9 +1041,10 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 	// Linksklick: Block platzieren
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-		if (voxelWorld && characterController && hasTargetBlock) {
+		VoxelWorld* worldForPlacing = voxelWorld.load(std::memory_order_acquire);
+		if (worldForPlacing && characterController && hasTargetBlock) {
 			// Verwende den bereits berechneten Target-Block
-			voxelWorld->setBlock(
+			worldForPlacing->setBlock(
 				currentTargetBlock.placePos.x, 
 				currentTargetBlock.placePos.y, 
 				currentTargetBlock.placePos.z, 
@@ -740,15 +1052,16 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 			);
 			
 			std::cout << "Block platziert bei: (" << currentTargetBlock.placePos.x << ", " 
-			          << currentTargetBlock.placePos.y << ", " << currentTargetBlock.placePos.z << ")" << std::endl;
+			 << currentTargetBlock.placePos.y << ", " << currentTargetBlock.placePos.z << ")" << std::endl;
 		}
 	}
 	
 	// Mittelklick: Block entfernen
 	if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
-		if (voxelWorld && characterController && hasTargetBlock) {
+		VoxelWorld* worldForRemoving = voxelWorld.load(std::memory_order_acquire);
+		if (worldForRemoving && characterController && hasTargetBlock) {
 			// Verwende den bereits berechneten Target-Block
-			voxelWorld->setBlock(
+			worldForRemoving->setBlock(
 				currentTargetBlock.blockPos.x, 
 				currentTargetBlock.blockPos.y, 
 				currentTargetBlock.blockPos.z, 
@@ -756,7 +1069,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 			);
 			
 			std::cout << "Block entfernt bei: (" << currentTargetBlock.blockPos.x << ", " 
-			          << currentTargetBlock.blockPos.y << ", " << currentTargetBlock.blockPos.z << ")" << std::endl;
+			  << currentTargetBlock.blockPos.y << ", " << currentTargetBlock.blockPos.z << ")" << std::endl;
 		}
 	}
 }
