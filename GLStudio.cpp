@@ -22,6 +22,7 @@
 #include "VoxelWorld.h"
 #include "VoxelCharacterController.h"
 #include "VoxelRaycast.h"
+#include "BlockOutline.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -63,6 +64,9 @@ glm::vec3 ambientColor = glm::vec3(0.3f, 0.35f, 0.4f); // Bläuliches Umgebungsli
 // Block targeting
 RaycastHit currentTargetBlock;
 bool hasTargetBlock = false;
+
+// Block outline renderer
+BlockOutline* blockOutline = nullptr;
 
 void createTerrainLandscape(PhysicsWorld* world, int size, float scale, float heightMultiplier) {
 	Perlin perlin;
@@ -231,6 +235,10 @@ int main()
 
 	// Initialisiere Voxel Character Controller
 	characterController = new VoxelCharacterController(voxelWorld, window);
+	
+	// Initialisiere Block Outline Renderer
+	blockOutline = new BlockOutline();
+	blockOutline->init("shaders/outline.vert", "shaders/outline.frag");
 
 	// render loop
 	// -----------
@@ -292,6 +300,16 @@ int main()
 			voxelShader.setInt("diffuseTexture", 0);
 			
 			voxelWorld->render();
+		}
+		
+		// === Render Block Outlines ===
+		if (hasTargetBlock && blockOutline) {
+			blockOutline->renderDualOutline(
+				currentTargetBlock.blockPos,   // Rot: Block zum Löschen
+				currentTargetBlock.placePos,   // Grün: Position für neuen Block
+				projection,
+				view
+			);
 		}
 
 		// === Optional: Render Physics-Objekte mit Schatten (falls noch benötigt) ===
@@ -367,6 +385,11 @@ int main()
 	ImGui::DestroyContext();
 
 	// Cleanup
+	if (blockOutline) {
+		delete blockOutline;
+		blockOutline = nullptr;
+	}
+	
 	if (characterController) {
 		delete characterController;
 		characterController = nullptr;

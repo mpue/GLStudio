@@ -136,6 +136,7 @@
     <ClCompile Include="GLStudio.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="PhysicsWorld.cpp" />
+    <ClCompile Include="src\BlockOutline.cpp" />
     <ClCompile Include="src\Bullet3Collision\BroadPhaseCollision\b3DynamicBvh.cpp" />
     <ClCompile Include="src\Bullet3Collision\BroadPhaseCollision\b3DynamicBvhBroadphase.cpp" />
     <ClCompile Include="src\Bullet3Collision\BroadPhaseCollision\b3OverlappingPairCache.cpp" />
@@ -719,6 +720,7 @@
     <ClInclude Include="include\shader.h" />
     <ClInclude Include="include\stb_image.h" />
     <ClInclude Include="PhysicsWorld.h" />
+    <ClInclude Include="src\BlockOutline.h" />
     <ClInclude Include="src\btBulletCollisionCommon.h" />
     <ClInclude Include="src\btBulletDynamicsCommon.h" />
     <ClInclude Include="src\Bullet3Collision\BroadPhaseCollision\b3BroadphaseCallback.h" />
@@ -1060,6 +1062,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
+    <None Include="docs\BlockOutline.md" />
     <None Include="docs\PerformanceOptimierung.md" />
     <None Include="docs\TextureAtlas.md" />
     <None Include="docs\VoxelCharacterController.md" />
@@ -1209,6 +1212,8 @@
     <None Include="include\glm\gtx\vector_angle.inl" />
     <None Include="include\glm\gtx\vector_query.inl" />
     <None Include="include\glm\gtx\wrap.inl" />
+    <None Include="shaders\outline.frag" />
+    <None Include="shaders\outline.vert" />
     <None Include="shaders\voxel.frag" />
     <None Include="shaders\voxel.vert" />
   </ItemGroup>

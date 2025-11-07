@@ -621,6 +621,9 @@
     <ClCompile Include="src\VoxelRaycast.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="src\BlockOutline.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\glad\glad.h">
@@ -2783,6 +2786,9 @@
     <ClInclude Include="src\VoxelRaycast.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="src\BlockOutline.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl">
@@ -3225,6 +3231,9 @@
     <None Include="docs\VoxelLighting.md" />
     <None Include="docs\TextureAtlas.md" />
     <None Include="docs\PerformanceOptimierung.md" />
+    <None Include="shaders\outline.vert" />
+    <None Include="shaders\outline.frag" />
+    <None Include="docs\BlockOutline.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\CMakeLists.txt" />
