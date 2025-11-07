@@ -21,6 +21,7 @@
 #include "Perlin.h"
 #include "VoxelWorld.h"
 #include "VoxelCharacterController.h"
+#include "VoxelRaycast.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -58,6 +59,10 @@ VoxelCharacterController* characterController;
 glm::vec3 sunDirection = glm::normalize(glm::vec3(0.5f, -1.0f, 0.3f)); // Sonne scheint schräg von oben
 glm::vec3 sunColor = glm::vec3(1.0f, 0.95f, 0.8f);  // Warmes Sonnenlicht
 glm::vec3 ambientColor = glm::vec3(0.3f, 0.35f, 0.4f); // Bläuliches Umgebungslicht
+
+// Block targeting
+RaycastHit currentTargetBlock;
+bool hasTargetBlock = false;
 
 void createTerrainLandscape(PhysicsWorld* world, int size, float scale, float heightMultiplier) {
 	Perlin perlin;
@@ -247,9 +252,15 @@ int main()
 
 		// Update Character Controller
 		characterController->update(deltaTime);
+		
+		// Update target block (für Visualisierung)
+		glm::vec3 rayOrigin = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+		glm::vec3 rayDirection = characterController->getFront();
+		currentTargetBlock = VoxelRaycast::raycast(rayOrigin, rayDirection, 5.0f, voxelWorld);
+		hasTargetBlock = currentTargetBlock.hit;
 
 		// render
-		// ------
+		// ----__
 		glClearColor(0.5f, 0.5f, 0.8f, 1.0f); // Sky color
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -325,6 +336,22 @@ int main()
 
 		ImGui::ColorEdit3("Sun Color", (float*)&sunColor);
 		ImGui::ColorEdit3("Ambient Color", (float*)&ambientColor);
+		
+		ImGui::Separator();
+		ImGui::Text("Block Targeting");
+		if (hasTargetBlock) {
+			ImGui::Text("Target Block: (%d, %d, %d)", 
+				currentTargetBlock.blockPos.x, 
+				currentTargetBlock.blockPos.y, 
+				currentTargetBlock.blockPos.z);
+			ImGui::Text("Place Position: (%d, %d, %d)", 
+				currentTargetBlock.placePos.x, 
+				currentTargetBlock.placePos.y, 
+				currentTargetBlock.placePos.z);
+			ImGui::Text("Distance: %.2f", currentTargetBlock.distance);
+		} else {
+			ImGui::Text("No block targeted");
+		}
 
 		ImGui::End();
 
@@ -576,35 +603,35 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 	else if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
 		navigate_mouse = false;
 
+	// Linksklick: Block platzieren
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-		// Platziere Block in Voxel-Welt
-		if (voxelWorld && characterController) {
-			glm::vec3 pos = characterController->getPosition();
-			glm::vec3 front = characterController->getFront();
-			
-			glm::vec3 blockPos = pos + front * 3.0f;
+		if (voxelWorld && characterController && hasTargetBlock) {
+			// Verwende den bereits berechneten Target-Block
 			voxelWorld->setBlock(
-				static_cast<int>(std::round(blockPos.x)),
-				static_cast<int>(std::round(blockPos.y)),
-				static_cast<int>(std::round(blockPos.z)),
+				currentTargetBlock.placePos.x, 
+				currentTargetBlock.placePos.y, 
+				currentTargetBlock.placePos.z, 
 				BlockType::Stone
 			);
+			
+			std::cout << "Block platziert bei: (" << currentTargetBlock.placePos.x << ", " 
+			          << currentTargetBlock.placePos.y << ", " << currentTargetBlock.placePos.z << ")" << std::endl;
 		}
 	}
 	
 	// Mittelklick: Block entfernen
 	if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
-		if (voxelWorld && characterController) {
-			glm::vec3 pos = characterController->getPosition();
-			glm::vec3 front = characterController->getFront();
-			
-			glm::vec3 blockPos = pos + front * 3.0f;
+		if (voxelWorld && characterController && hasTargetBlock) {
+			// Verwende den bereits berechneten Target-Block
 			voxelWorld->setBlock(
-				static_cast<int>(std::round(blockPos.x)),
-				static_cast<int>(std::round(blockPos.y)),
-				static_cast<int>(std::round(blockPos.z)),
+				currentTargetBlock.blockPos.x, 
+				currentTargetBlock.blockPos.y, 
+				currentTargetBlock.blockPos.z, 
 				BlockType::Air
 			);
+			
+			std::cout << "Block entfernt bei: (" << currentTargetBlock.blockPos.x << ", " 
+			          << currentTargetBlock.blockPos.y << ", " << currentTargetBlock.blockPos.z << ")" << std::endl;
 		}
 	}
 }

@@ -165,22 +165,86 @@ if (voxelWorld) {
 **Linksklick**: Block platzieren  
 **Mittelklick (Mausrad)**: Block entfernen
 
+Das System verwendet präzises **Voxel-Raycasting** mit dem DDA-Algorithmus (Digital Differential Analyzer) für zuverlässige Block-Interaktion.
+
+#### Raycasting-System
+
+```cpp
+#include "VoxelRaycast.h"
+
+// Raycast von Kamera-Position in Blickrichtung
+glm::vec3 origin = camera.Position;
+glm::vec3 direction = camera.Front;
+float maxDistance = 5.0f;  // 5 Blöcke Reichweite
+
+RaycastHit hit = VoxelRaycast::raycast(origin, direction, maxDistance, voxelWorld);
+
+if (hit.hit) {
+    // Block wurde getroffen!
+    glm::ivec3 targetBlock = hit.blockPos;  // Getroffener Block
+    glm::ivec3 placeBlock = hit.placePos;       // Wo neuer Block platziert wird
+    float distance = hit.distance;              // Distanz zum Block
+    glm::vec3 normal = hit.normal;        // Normale der getroffenen Fläche
+}
+```
+
+#### Mouse Button Callback
+
 ```cpp
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
+    // Block platzieren
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-   glm::vec3 pos = characterController->getPosition();
-        glm::vec3 front = characterController->getFront();
- glm::vec3 blockPos = pos + front * 3.0f;
-
-        voxelWorld->setBlock(
-            static_cast<int>(std::round(blockPos.x)),
-       static_cast<int>(std::round(blockPos.y)),
-       static_cast<int>(std::round(blockPos.z)),
-            BlockType::Stone
-     );
+        if (voxelWorld && characterController && hasTargetBlock) {
+     voxelWorld->setBlock(
+        currentTargetBlock.placePos.x, 
+        currentTargetBlock.placePos.y, 
+                currentTargetBlock.placePos.z, 
+       BlockType::Stone
+       );
+        }
+    }
+ 
+    // Block entfernen
+  if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+        if (voxelWorld && characterController && hasTargetBlock) {
+          voxelWorld->setBlock(
+                currentTargetBlock.blockPos.x, 
+          currentTargetBlock.blockPos.y, 
+         currentTargetBlock.blockPos.z, 
+  BlockType::Air
+      );
+   }
     }
 }
+```
+
+#### RaycastHit Struktur
+
+```cpp
+struct RaycastHit {
+    bool hit;     // Wurde ein Block getroffen?
+    glm::ivec3 blockPos;      // Position des getroffenen Blocks
+    glm::ivec3 placePos;      // Position für neuen Block (vor dem getroffenen)
+    glm::vec3 hitPoint;       // Genauer 3D-Trefferpunkt
+    glm::vec3 normal;   // Normale der getroffenen Fläche
+    float distance;     // Distanz vom Origin zum Trefferpunkt
+};
+```
+
+#### Vorteile des DDA-Raycasting
+
+- ? **Präzise**: Trifft immer den korrekten Block
+- ? **Schnell**: O(n) Komplexität, wo n = Anzahl durchlaufener Voxel
+- ? **Zuverlässig**: Funktioniert bei allen Blickwinkeln
+- ? **Minecraft-like**: Gleicher Algorithmus wie im Original
+
+#### Reichweite anpassen
+
+```cpp
+// In mouse_button_callback:
+float reach = 10.0f;  // Erhöhe Reichweite auf 10 Blöcke
+RaycastHit hit = VoxelRaycast::raycast(origin, direction, reach, voxelWorld);
 ```
 
 ## Klassen
@@ -436,117 +500,14 @@ switch (type) {
 unsigned int voxelAtlasTexture = loadTexture("resources/textures/atlas.png");
 ```
 
-### Standard Side-Textur
-
-Alle Block-Seiten (North, South, East, West) verwenden standardmäßig die Textur in **`[1, 2]`**, es sei denn, es wird explizit eine andere Textur für diesen Block-Typ definiert (wie bei Wood).
-
-### Textur-Richtlinien
-
-- **Auflösung**: 256x256 Pixel pro Tile
-- **Format**: PNG mit Alpha-Kanal (für transparente Blöcke wie Wasser)
-- **Farbraum**: sRGB
-- **Kachel-Fähigkeit**: Texturen sollten seamless/tileable sein für nahtlose Übergänge
-
-### Beispiel: Neuen Block-Typ hinzufügen
-
-```cpp
-// 1. In VoxelChunk.h enum erweitern:
-enum class BlockType : uint8_t {
-    Air = 0,
-    Stone = 1,
-    Grass = 2,
-    Dirt = 3,
-  Wood = 4,
-    Sand = 5,
-    Water = 6,
- Cobblestone = 7  // NEU
-};
-
-// 2. In VoxelChunk.cpp addFace() erweitern:
-case BlockType::Cobblestone:
-    atlasX = 2; atlasY = 2;  // Tile [2,2]
-    break;
-```
-
-## Performance-Optimierungen
-
-### Voxel-spezifische Beleuchtung
-Keine teuren Shadow-Maps oder Point-Lights. Stattdessen:
-- Einfache direktionale Sonne (1 dot-Product pro Fragment)
-- Vertex-basiertes Ambient Occlusion (keine Runtime-Berechnung)
-- Distance Fog statt komplexem Atmospheric Scattering
-
-### Face Culling
-Das System rendert nur sichtbare Flächen. Eine Fläche wird nur generiert, wenn der angrenzende Block Luft ist.
-
-### Chunk-Updates
-Nach dem Setzen eines Blocks werden nur betroffene Chunks aktualisiert:
-```cpp
-voxelWorld->setBlock(x, y, z, type); // Automatisches Update des Chunks
-```
-
-### Batch-Updates
-Für viele Block-Änderungen auf einmal:
-```cpp
-// Setze viele Blöcke
-for (int i = 0; i < 1000; i++) {
-    chunk->setBlock(x[i], y[i], z[i], type[i]);
-}
-// Dann einmalig Mesh generieren
-chunk->generateMesh();
-chunk->setupOpenGL();
-```
-
-## Koordinatensysteme
-
-**Weltkoordinaten**: Absolute Position in der Welt  
-**Chunk-Koordinaten**: Welcher Chunk (dividiert durch 16)  
-**Lokale Koordinaten**: Position im Chunk (0-15)
-
-```cpp
-// Automatische Konvertierung in VoxelWorld
-voxelWorld->setBlock(50, 10, 25, BlockType::Stone); // Weltkoordinaten
-
-// Manuell:
-glm::ivec3 chunkCoord = voxelWorld->worldToChunkCoord(50, 10, 25);  // (3, 0, 1)
-glm::ivec3 localCoord = voxelWorld->worldToLocalCoord(50, 10, 25);// (2, 10, 9)
-```
-
-## Erweiterungen (für Fortgeschrittene)
-
-### Greedy Meshing
-Kombiniere benachbarte gleiche Flächen zu größeren Quads für bessere Performance.
-
-### LOD (Level of Detail)
-Rendere ferne Chunks mit weniger Details/niedrigerer Auflösung.
-
-### Multithreading
-Generiere Meshes in Background-Threads für flüssigere Framerate.
-
-### Chunk-Persistenz
-Speichere/Lade Chunks in/aus Dateien:
-```cpp
-void saveChunk(VoxelChunk* chunk, const std::string& filename);
-VoxelChunk* loadChunk(const std::string& filename);
-```
-
-### Transparente Blöcke
-Wasser/Glas benötigen spezielle Render-Queue (nach soliden Blöcken):
-```cpp
-bool isBlockTransparent(BlockType type) {
-    return type == BlockType::Water || type == BlockType::Glass;
-}
-```
-
-### Ambient Occlusion
-Dunklere Ecken für bessere Tiefenwahrnehmung durch Vertex-Farben.
-
 ## Projektdateien
 
 - `src/VoxelChunk.h` - Chunk-Klasse Header
 - `src/VoxelChunk.cpp` - Chunk-Implementierung und Mesh-Generierung
 - `src/VoxelWorld.h` - Welt-Manager Header
 - `src/VoxelWorld.cpp` - Chunk-Verwaltung und Koordinaten-Konvertierung
+- `src/VoxelRaycast.h` - Raycasting Header (DDA-Algorithmus)
+- `src/VoxelRaycast.cpp` - Raycasting-Implementierung
 - `shaders/voxel.vert` - Voxel Vertex Shader mit AO
 - `shaders/voxel.frag` - Voxel Fragment Shader mit Beleuchtung
 - `GLStudio.cpp` - Integration in bestehende Engine

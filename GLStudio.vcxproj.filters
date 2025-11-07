@@ -618,6 +618,9 @@
     <ClCompile Include="src\VoxelCharacterController.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="src\VoxelRaycast.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\glad\glad.h">
@@ -2775,6 +2778,9 @@
       <Filter>Headerdateien</Filter>
     </ClInclude>
     <ClInclude Include="src\VoxelCharacterController.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="src\VoxelRaycast.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>

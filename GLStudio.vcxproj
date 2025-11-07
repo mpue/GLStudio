@@ -333,6 +333,7 @@
     <ClCompile Include="src\LinearMath\TaskScheduler\btThreadSupportWin32.cpp" />
     <ClCompile Include="src\VoxelCharacterController.cpp" />
     <ClCompile Include="src\VoxelChunk.cpp" />
+    <ClCompile Include="src\VoxelRaycast.cpp" />
     <ClCompile Include="src\VoxelWorld.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -1054,6 +1055,7 @@
     <ClInclude Include="src\Perlin.h" />
     <ClInclude Include="src\VoxelCharacterController.h" />
     <ClInclude Include="src\VoxelChunk.h" />
+    <ClInclude Include="src\VoxelRaycast.h" />
     <ClInclude Include="src\VoxelWorld.h" />
   </ItemGroup>
   <ItemGroup>
