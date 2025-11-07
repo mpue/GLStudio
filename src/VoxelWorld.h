@@ -5,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <mutex> // NEU: Für Thread-Safety
 
 struct Vec3Compare {
 	bool operator()(const glm::ivec3& a, const glm::ivec3& b) const {
@@ -27,7 +28,7 @@ public:
 
 	// NEUE BATCH-MODI
 	void beginBatchUpdate();  // Deaktiviert Auto-Mesh-Updates
-	void endBatchUpdate();    // Aktualisiert nur Dirty-Chunks
+	void endBatchUpdate();    // Aktualisiert nur betroffene Chunks
 
 	// Mesh-Aktualisierung
 	void updateChunkMesh(int chunkX, int chunkY, int chunkZ);
@@ -54,4 +55,7 @@ private:
 	std::set<glm::ivec3, Vec3Compare> dirtyChunks;
 
 	void markChunkDirty(int chunkX, int chunkY, int chunkZ);
+	
+	// NEU: Mutex für Thread-Safety beim Zugriff auf Chunks
+	mutable std::mutex chunkMutex;
 };

@@ -319,17 +319,37 @@ callback(0.9f, "Setze Blöcke (Batch)...");
     
   // OPTIMIERUNG 8: Beende Batch-Modus - aktualisiert nur betroffene Chunks!
     if (callback) {
-   callback(0.95f, "Aktualisiere Chunks...");
-    }
- 
-    std::cout << "\n=== Chunk-Update (Nur Dirty-Chunks) ===" << std::endl;
-  
-    // endBatchUpdate() updatet nur die tatsächlich betroffenen Chunks
-world->endBatchUpdate();
-    
-    auto endTime = std::chrono::high_resolution_clock::now();
-  auto totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-    auto chunkDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - setTime);
+		callback(0.95f, "Aktualisiere Chunks...");
+	}
+	
+	std::cout << "\n=== Chunk-Update (Alle Chunks) ===" << std::endl;
+	
+	// WICHTIG: Verwende updateAllChunks() statt endBatchUpdate()
+	// um sicherzustellen, dass ALLE Chunks ein Mesh bekommen
+	world->endBatchUpdate();
+	
+	// Prüfe ob alle Chunks ein Mesh haben und generiere fehlende
+	std::cout << "Überprüfe alle Chunks auf fehlende Meshes..." << std::endl;
+	int chunksWithoutMesh = 0;
+	int totalChunks = 0;
+	
+	for (auto& pair : world->chunks) {
+		totalChunks++;
+		VoxelChunk* chunk = pair.second.get();
+		if (!chunk->isEmpty() && chunk->getVertices().empty()) {
+			// Chunk hat Blöcke aber kein Mesh - generiere es!
+			glm::ivec3 coord = pair.first;
+			world->updateChunkMesh(coord.x, coord.y, coord.z);
+			chunksWithoutMesh++;
+		}
+	}
+	
+	std::cout << "Gesamt-Chunks: " << totalChunks << std::endl;
+	std::cout << "Chunks ohne Mesh (nachträglich generiert): " << chunksWithoutMesh << std::endl;
+	
+	auto endTime = std::chrono::high_resolution_clock::now();
+	auto totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+	auto chunkDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - setTime);
  
     std::cout << "Zeit: " << chunkDuration.count() << "ms" << std::endl;
 
