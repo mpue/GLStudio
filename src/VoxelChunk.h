@@ -104,9 +104,9 @@ bool glInitialized;
     void addFace(FaceDirection direction, int x, int y, int z, BlockType type);
     BlockTextures getBlockTextures(BlockType type, FaceDirection face) const;
     
-    // Textur-Atlas Konfiguration (16x16 Texturen im Atlas)
-    static constexpr float ATLAS_SIZE = 16.0f;
-    glm::vec2 getAtlasUV(int atlasX, int atlasY) const;
+    // Textur-Atlas Konfiguration (4x4 Texturen im Atlas, 1024x1024px, 256x256px pro Tile)
+    static constexpr float ATLAS_SIZE = 4.0f;
+  glm::vec2 getAtlasUV(int atlasX, int atlasY) const;
 };
 
 #endif // VOXEL_CHUNK_H

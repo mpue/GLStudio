@@ -336,30 +336,137 @@ out VS_OUT {
 
 ## Textur-Atlas
 
-Das System verwendet einen 16x16 Textur-Atlas. Die Textur-Zuordnung ist in `VoxelChunk.cpp` in der Funktion `getBlockTextures()` konfiguriert:
+Das System verwendet einen **4x4 Textur-Atlas** (1024x1024 Pixel, 256x256 Pixel pro Tile).
+
+### Atlas Layout
+
+```
+Atlas-Koordinaten [X, Y]:
+
+Spalte:  0        1    2        3
+       ?????????????????????????????????????
+Zeile 0? Grass  ?     ? Stone  ? Wood   ?  <- Top-Texturen
+       ? Top    ?  ?        ? Rings  ?
+       ? [0,0]  ? [1,0]  ? [2,0]  ? [3,0]  ?
+       ?????????????????????????????????????
+Zeile 1?        ? Dirt/  ?        ?        ?  <- Bottom-Texturen
+       ?  ?Grass   ?   ?  ?
+       ? [0,1]  ?Bottom  ? [2,1]  ? [3,1]  ?
+     ?        ? [1,1]  ?        ??
+       ?????????????????????????????????????
+Zeile 2?   ?**SIDE**?     ?        ?  <- Side-Texturen
+       ?  ?**TEXT**?        ? ?
+       ? [0,2]  ?**[1,2]**?[2,2]  ? [3,2]  ?
+     ?????????????????????????????????????
+Zeile 3? Sand   ? Water  ?   ?      ?  <- Spezial-Texturen
+       ? [0,3]  ? [1,3]  ? [2,3]  ? [3,3]  ?
+    ?????????????????????????????????????
+```
+
+### Block-Textur-Zuordnung
+
+Die Textur-Zuordnung ist in `VoxelChunk.cpp` in der Funktion `addFace()` konfiguriert:
+
+#### Grass Block
+- **Top**: `[0, 0]` - Gras-Textur
+- **Bottom**: `[1, 1]` - Erd-Textur
+- **Sides**: `[1, 2]` - Gras-Seiten-Textur
+
+#### Stone Block
+- **Alle Seiten**: `[2, 0]` - Stein-Textur
+
+#### Dirt Block
+- **Alle Seiten**: `[1, 1]` - Erd-Textur
+
+#### Wood Block
+- **Top/Bottom**: `[3, 0]` - Holz-Ringe
+- **Sides**: `[1, 2]` - Holz-Rinde
+
+#### Sand Block
+- **Alle Seiten**: `[0, 3]` - Sand-Textur
+
+#### Water Block
+- **Alle Seiten**: `[1, 3]` - Wasser-Textur
+
+### Textur-Atlas erstellen
+
+**Datei**: `resources/textures/atlas.png`  
+**Größe**: 1024x1024 Pixel  
+**Tile-Größe**: 256x256 Pixel  
+**Layout**: 4x4 Grid
+
+**Wichtig**: Die Seiten-Textur für alle Blöcke befindet sich in **Spalte 1, Zeile 2** (Koordinate `[1, 2]`).
+
+### UV-Koordinaten-Berechnung
 
 ```cpp
+// 4x4 Atlas
+float tileSize = 1.0f / 4.0f;  // 0.25
+
+// Beispiel für Tile [1, 2]:
+float uMin = 1 * 0.25f;  // 0.25
+float vMin = 2 * 0.25f;// 0.50
+float uMax = uMin + 0.25f;  // 0.50
+float vMax = vMin + 0.25f;  // 0.75
+```
+
+### Eigene Texturen hinzufügen
+
+**1. Erstelle einen 1024x1024 PNG-Atlas:**
+   - Verwende ein Bildbearbeitungsprogramm (Photoshop, GIMP, etc.)
+   - Teile das Bild in ein 4x4 Grid (256x256 pro Tile)
+   - Platziere deine Texturen entsprechend dem Layout oben
+
+**2. Passe die Atlas-Koordinaten in `VoxelChunk.cpp` an:**
+```cpp
 switch (type) {
-    case BlockType::Stone:
-        atlasX = 0; atlasY = 0;
-  break;
-    case BlockType::Grass:
-     if (face == FaceDirection::Top) {
-      atlasX = 1; atlasY = 0;  // Gras oben
-        } else if (face == FaceDirection::Bottom) {
-            atlasX = 2; atlasY = 0;  // Erde unten
-      } else {
-      atlasX = 3; atlasY = 0;  // Gras-Seite
+    case BlockType::MyNewBlock:
+        if (direction == FaceDirection::Top) {
+      atlasX = 2; atlasY = 1;  // Beispiel: Tile [2,1]
+        } else {
+        atlasX = 1; atlasY = 2;  // Seiten verwenden Standard-Textur
         }
-    break;
-    // ... weitere Block-Typen
+        break;
+    // ...
 }
 ```
 
-**Um eigene Texturen hinzuzufügen:**
-1. Erstelle einen Textur-Atlas (z.B. 256x256 Pixel mit 16x16 Feldern)
-2. Passe die `atlasX` und `atlasY` Werte in `getBlockTextures()` an
-3. Lade die Textur in `main()` und binde sie vor dem Rendering
+**3. Lade die Textur in `GLStudio.cpp`:**
+```cpp
+unsigned int voxelAtlasTexture = loadTexture("resources/textures/atlas.png");
+```
+
+### Standard Side-Textur
+
+Alle Block-Seiten (North, South, East, West) verwenden standardmäßig die Textur in **`[1, 2]`**, es sei denn, es wird explizit eine andere Textur für diesen Block-Typ definiert (wie bei Wood).
+
+### Textur-Richtlinien
+
+- **Auflösung**: 256x256 Pixel pro Tile
+- **Format**: PNG mit Alpha-Kanal (für transparente Blöcke wie Wasser)
+- **Farbraum**: sRGB
+- **Kachel-Fähigkeit**: Texturen sollten seamless/tileable sein für nahtlose Übergänge
+
+### Beispiel: Neuen Block-Typ hinzufügen
+
+```cpp
+// 1. In VoxelChunk.h enum erweitern:
+enum class BlockType : uint8_t {
+    Air = 0,
+    Stone = 1,
+    Grass = 2,
+    Dirt = 3,
+  Wood = 4,
+    Sand = 5,
+    Water = 6,
+ Cobblestone = 7  // NEU
+};
+
+// 2. In VoxelChunk.cpp addFace() erweitern:
+case BlockType::Cobblestone:
+    atlasX = 2; atlasY = 2;  // Tile [2,2]
+    break;
+```
 
 ## Performance-Optimierungen
 

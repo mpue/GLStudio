@@ -157,63 +157,65 @@ atlasX = 7; atlasY = 0;
 }
 
 void VoxelChunk::addFace(FaceDirection direction, int x, int y, int z, BlockType type) {
-    // 4x4 TEXTUR-ATLAS SYSTEM (256x256px, 64x64px pro Tile)
-    // Atlas Layout (Beispiel):
-    // [0,0] [1,0] [2,0] [3,0]  <- Reihe 0
-    // [0,1] [1,1] [2,1] [3,1]  <- Reihe 1 (SEITEN-TEXTUR)
-    // [0,2] [1,2] [2,2] [3,2]  <- Reihe 2
-    // [0,3] [1,3] [2,3] [3,3]  <- Reihe 3
+    // 4x4 TEXTUR-ATLAS SYSTEM (1024x1024px, 256x256px pro Tile)
+    // Atlas Layout:
+    // [0,0] [1,0] [2,0] [3,0]  <- Reihe 0 (Top-Texturen)
+    // [0,1] [1,1] [2,1] [3,1]  <- Reihe 1 (Bottom-Texturen)
+    // [0,2] [1,2] [2,2] [3,2]  <- Reihe 2 (Side-Texturen)
+    // [0,3] [1,3] [2,3] [3,3]  <- Reihe 3 (Spezial-Texturen)
+    
+    // Seiten-Texturen sind in Spalte 1, Zeile 2 (Index [1,2])
     
     // Bestimme Atlas-Position basierend auf BlockType und Face
     int atlasX = 0;
-    int atlasY = 0;
+  int atlasY = 0;
     
-  // Seiten-Faces (North, South, East, West) bekommen immer erste Textur aus Reihe 1
+    // Prüfe ob es eine Seiten-Face ist (North, South, East, West)
     bool isSideFace = (direction == FaceDirection::North || 
             direction == FaceDirection::South ||
-   direction == FaceDirection::East || 
-         direction == FaceDirection::West);
+             direction == FaceDirection::East || 
+            direction == FaceDirection::West);
     
     if (isSideFace) {
-        // Seiten: Erste Textur aus Reihe 1 -> [0, 1]
-        atlasX = 0;
-        atlasY = 1;
+        // Seiten: Spalte 1, Zeile 2 -> [1, 2]
+    atlasX = 1;
+        atlasY = 2;
     } else {
- // Top und Bottom: Unterschiedliche Texturen je nach BlockType
-    switch (type) {
-    case BlockType::Grass:
-  if (direction == FaceDirection::Top) {
-  atlasX = 0; atlasY = 0;  // Gras-Top: [0,0]
-   } else {
-                    atlasX = 1; atlasY = 0;  // Gras-Bottom (Erde): [1,0]
+        // Top und Bottom: Unterschiedliche Texturen je nach BlockType
+     switch (type) {
+            case BlockType::Grass:
+   if (direction == FaceDirection::Top) {
+    atlasX = 0; atlasY = 0;  // Gras-Top: [0,0]
+      } else {
+           atlasX = 1; atlasY = 1;  // Gras-Bottom (Erde): [1,1]
       }
       break;
-     case BlockType::Stone:
-  atlasX = 2; atlasY = 0;  // Stein: [2,0]
-  break;
-          case BlockType::Dirt:
-     atlasX = 1; atlasY = 0;  // Erde: [1,0]
+            case BlockType::Stone:
+     atlasX = 2; atlasY = 0;  // Stein: [2,0]
+   break;
+            case BlockType::Dirt:
+        atlasX = 1; atlasY = 1;  // Erde: [1,1]
+         break;
+     case BlockType::Wood:
+       if (direction == FaceDirection::Top || direction == FaceDirection::Bottom) {
+      atlasX = 3; atlasY = 0;  // Holz-Ringe: [3,0]
+  } else {
+  atlasX = 1; atlasY = 2;  // Holz-Rinde (wie Seiten): [1,2]
+   }
       break;
-         case BlockType::Wood:
-         if (direction == FaceDirection::Top || direction == FaceDirection::Bottom) {
-       atlasX = 3; atlasY = 0;  // Holz-Ringe: [3,0]
-        } else {
-       atlasX = 0; atlasY = 1;  // Holz-Rinde: [0,1] (wie Seiten)
-     }
-break;
   case BlockType::Sand:
-           atlasX = 0; atlasY = 2;  // Sand: [0,2]
-         break;
-   case BlockType::Water:
-  atlasX = 1; atlasY = 2;  // Wasser: [1,2]
-         break;
-       default:
-    atlasX = 2; atlasY = 0;  // Default: Stein
-        break;
+ atlasX = 0; atlasY = 3;  // Sand: [0,3]
+     break;
+            case BlockType::Water:
+      atlasX = 1; atlasY = 3;  // Wasser: [1,3]
+   break;
+     default:
+                atlasX = 2; atlasY = 0;  // Default: Stein
+       break;
         }
     }
     
-    // Berechne UV-Koordinaten für das Tile im Atlas
+    // Berechne UV-Koordinaten für das Tile im Atlas (4x4 Grid)
     float tileSize = 1.0f / ATLAS_SIZE;  // 0.25 für 4x4
     float uMin = atlasX * tileSize;
     float vMin = atlasY * tileSize;
@@ -222,175 +224,171 @@ break;
     
     // Berechne Weltposition
     float worldX = static_cast<float>(chunkPosition.x * CHUNK_SIZE + x);
-  float worldY = static_cast<float>(chunkPosition.y * CHUNK_SIZE + y);
+    float worldY = static_cast<float>(chunkPosition.y * CHUNK_SIZE + y);
     float worldZ = static_cast<float>(chunkPosition.z * CHUNK_SIZE + z);
-  
+
     unsigned int baseIndex = static_cast<unsigned int>(vertices.size() / 8);
   
     glm::vec3 normal;
     
     // Vertex-Positionen und UVs basierend auf der Richtung
     switch (direction) {
- case FaceDirection::Top: // +Y
-        normal = glm::vec3(0, 1, 0); // GEÄNDERT: Nach außen (oben)
+        case FaceDirection::Top: // +Y
+       normal = glm::vec3(0, 1, 0);
      
-        // Vertex 0: (-0.5, 0.5, -0.5)
-        vertices.insert(vertices.end(), {
-     worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
-        normal.x, normal.y, normal.z,
-         uMin, vMax
-        });
-   // Vertex 1: (0.5, 0.5, -0.5)
-        vertices.insert(vertices.end(), {
-            worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
-            normal.x, normal.y, normal.z,
-      uMax, vMax
+          vertices.insert(vertices.end(), {
+worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
+    normal.x, normal.y, normal.z,
+                uMin, vMax
     });
-        // Vertex 2: (0.5, 0.5, 0.5)
    vertices.insert(vertices.end(), {
-      worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
-          normal.x, normal.y, normal.z,
-        uMax, vMin
+            worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
+              normal.x, normal.y, normal.z,
+uMax, vMax
+    });
+            vertices.insert(vertices.end(), {
+          worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
+         normal.x, normal.y, normal.z,
+       uMax, vMin
+      });
+  vertices.insert(vertices.end(), {
+    worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
+  normal.x, normal.y, normal.z,
+          uMin, vMin
      });
-    // Vertex 3: (-0.5, 0.5, 0.5)
-      vertices.insert(vertices.end(), {
-            worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
-        normal.x, normal.y, normal.z,
-        uMin, vMin
-        });
-break;
+      break;
   
-    case FaceDirection::Bottom: // -Y
-   normal = glm::vec3(0, -1, 0); // GEÄNDERT: Nach außen (unten)
+        case FaceDirection::Bottom: // -Y
+            normal = glm::vec3(0, -1, 0);
         
         vertices.insert(vertices.end(), {
-            worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
+        worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
        normal.x, normal.y, normal.z,
-            uMin, vMin
-        });
-        vertices.insert(vertices.end(), {
-            worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
-            normal.x, normal.y, normal.z,
-            uMax, vMin
-      });
-    vertices.insert(vertices.end(), {
-       worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
-            normal.x, normal.y, normal.z,
-      uMax, vMax
-        });
-        vertices.insert(vertices.end(), {
-  worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
-       normal.x, normal.y, normal.z,
-            uMin, vMax
-        });
-        break;
-    
-    case FaceDirection::North: // +Z
-        normal = glm::vec3(0, 0, 1); // GEÄNDERT: Nach außen (nord)
-    
-        vertices.insert(vertices.end(), {
-          worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
-         normal.x, normal.y, normal.z,
-       uMin, vMax
-        });
-        vertices.insert(vertices.end(), {
-            worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
-            normal.x, normal.y, normal.z,
-uMin, vMin
-        });
-        vertices.insert(vertices.end(), {
-      worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
- normal.x, normal.y, normal.z,
- uMax, vMin
-        });
-        vertices.insert(vertices.end(), {
-            worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
-            normal.x, normal.y, normal.z,
-    uMax, vMax
-        });
-        break;
- 
-    case FaceDirection::South: // -Z
-        normal = glm::vec3(0, 0, -1); // GEÄNDERT: Nach außen (süd)
-      
+       uMin, vMin
+            });
    vertices.insert(vertices.end(), {
-            worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
-   normal.x, normal.y, normal.z,
-            uMin, vMax
+    worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
+ normal.x, normal.y, normal.z,
+        uMax, vMin
  });
-        vertices.insert(vertices.end(), {
-      worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
-   normal.x, normal.y, normal.z,
- uMin, vMin
-   });
-        vertices.insert(vertices.end(), {
-        worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
-        normal.x, normal.y, normal.z,
-            uMax, vMin
-        });
-        vertices.insert(vertices.end(), {
-            worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
+         vertices.insert(vertices.end(), {
+    worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
     normal.x, normal.y, normal.z,
-  uMax, vMax
-        });
-        break;
-   
-    case FaceDirection::East: // +X
-        normal = glm::vec3(1, 0, 0); // GEÄNDERT: Nach außen (ost)
-    
-     vertices.insert(vertices.end(), {
-   worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
-            normal.x, normal.y, normal.z,
-        uMin, vMax
- });
-        vertices.insert(vertices.end(), {
-            worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
-            normal.x, normal.y, normal.z,
-      uMin, vMin
-        });
-    vertices.insert(vertices.end(), {
-      worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
-  normal.x, normal.y, normal.z,
-       uMax, vMin
+          uMax, vMax
    });
-        vertices.insert(vertices.end(), {
-            worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
-            normal.x, normal.y, normal.z,
-      uMax, vMax
-        });
-        break;
-   
-    case FaceDirection::West: // -X
-        normal = glm::vec3(-1, 0, 0); // GEÄNDERT: Nach außen (west)
-  
-        vertices.insert(vertices.end(), {
-        worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
-   normal.x, normal.y, normal.z,
-            uMin, vMax
- });
-        vertices.insert(vertices.end(), {
-        worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
-            normal.x, normal.y, normal.z,
-      uMin, vMin
+            vertices.insert(vertices.end(), {
+  worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
+           normal.x, normal.y, normal.z,
+     uMin, vMax
+            });
+  break;
+    
+        case FaceDirection::North: // +Z
+      normal = glm::vec3(0, 0, 1);
+    
+       vertices.insert(vertices.end(), {
+    worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
+              normal.x, normal.y, normal.z,
+                uMin, vMax
       });
         vertices.insert(vertices.end(), {
-      worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
-            normal.x, normal.y, normal.z,
+          worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
+           normal.x, normal.y, normal.z,
+  uMin, vMin
+    });
+    vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
+                normal.x, normal.y, normal.z,
+      uMax, vMin
+            });
+    vertices.insert(vertices.end(), {
+     worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
+          normal.x, normal.y, normal.z,
+     uMax, vMax
+      });
+       break;
+ 
+     case FaceDirection::South: // -Z
+   normal = glm::vec3(0, 0, -1);
+  
+            vertices.insert(vertices.end(), {
+              worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
+          normal.x, normal.y, normal.z,
+           uMin, vMax
+     });
+    vertices.insert(vertices.end(), {
+            worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
+         normal.x, normal.y, normal.z,
+    uMin, vMin
+     });
+  vertices.insert(vertices.end(), {
+   worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
+   normal.x, normal.y, normal.z,
+      uMax, vMin
+            });
+       vertices.insert(vertices.end(), {
+     worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
+          normal.x, normal.y, normal.z,
+      uMax, vMax
+       });
+   break;
+   
+        case FaceDirection::East: // +X
+            normal = glm::vec3(1, 0, 0);
+    
+            vertices.insert(vertices.end(), {
+worldX + 0.5f, worldY - 0.5f, worldZ + 0.5f,
+          normal.x, normal.y, normal.z,
+             uMin, vMax
+            });
+      vertices.insert(vertices.end(), {
+                worldX + 0.5f, worldY + 0.5f, worldZ + 0.5f,
+           normal.x, normal.y, normal.z,
+           uMin, vMin
+       });
+            vertices.insert(vertices.end(), {
+         worldX + 0.5f, worldY + 0.5f, worldZ - 0.5f,
+      normal.x, normal.y, normal.z,
      uMax, vMin
+     });
+ vertices.insert(vertices.end(), {
+worldX + 0.5f, worldY - 0.5f, worldZ - 0.5f,
+     normal.x, normal.y, normal.z,
+              uMax, vMax
+          });
+break;
+   
+ case FaceDirection::West: // -X
+  normal = glm::vec3(-1, 0, 0);
+  
+     vertices.insert(vertices.end(), {
+     worldX - 0.5f, worldY - 0.5f, worldZ - 0.5f,
+     normal.x, normal.y, normal.z,
+        uMin, vMax
+            });
+            vertices.insert(vertices.end(), {
+       worldX - 0.5f, worldY + 0.5f, worldZ - 0.5f,
+          normal.x, normal.y, normal.z,
+          uMin, vMin
         });
-        vertices.insert(vertices.end(), {
-     worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
-            normal.x, normal.y, normal.z,
-    uMax, vMax
-  });
-        break;
+ vertices.insert(vertices.end(), {
+       worldX - 0.5f, worldY + 0.5f, worldZ + 0.5f,
+    normal.x, normal.y, normal.z,
+       uMax, vMin
+          });
+     vertices.insert(vertices.end(), {
+          worldX - 0.5f, worldY - 0.5f, worldZ + 0.5f,
+    normal.x, normal.y, normal.z,
+                uMax, vMax
+            });
+            break;
     }
  
     // Füge Indices für zwei Dreiecke hinzu (Quad)
     indices.insert(indices.end(), {
-   baseIndex, baseIndex + 1, baseIndex + 2,
-   baseIndex, baseIndex + 2, baseIndex + 3
- });
+        baseIndex, baseIndex + 1, baseIndex + 2,
+ baseIndex, baseIndex + 2, baseIndex + 3
+    });
 }
 
 void VoxelChunk::generateMesh() {
