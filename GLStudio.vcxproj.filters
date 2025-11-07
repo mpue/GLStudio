@@ -624,6 +624,9 @@
     <ClCompile Include="src\BlockOutline.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="src\TerrainGenerator.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\glad\glad.h">
@@ -2789,6 +2792,9 @@
     <ClInclude Include="src\BlockOutline.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="src\TerrainGenerator.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\glm\detail\func_common.inl">
@@ -3234,6 +3240,7 @@
     <None Include="shaders\outline.vert" />
     <None Include="shaders\outline.frag" />
     <None Include="docs\BlockOutline.md" />
+    <None Include="docs\TerrainGenerator.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\CMakeLists.txt" />

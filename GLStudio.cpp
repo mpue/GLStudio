@@ -23,6 +23,7 @@
 #include "VoxelCharacterController.h"
 #include "VoxelRaycast.h"
 #include "BlockOutline.h"
+#include "TerrainGenerator.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -67,6 +68,13 @@ bool hasTargetBlock = false;
 
 // Block outline renderer
 BlockOutline* blockOutline = nullptr;
+
+// Terrain generation
+TerrainGenerator* terrainGenerator = nullptr;
+float terrainGenerationProgress = 0.0f;
+std::string terrainGenerationMessage = "";
+bool terrainGenerationInProgress = false;
+bool terrainGenerated = false;
 
 void createTerrainLandscape(PhysicsWorld* world, int size, float scale, float heightMultiplier) {
 	Perlin perlin;
@@ -213,6 +221,36 @@ int main()
 	// Initialisiere Voxel-Welt
 	voxelWorld = new VoxelWorld();
 	
+	// Initialisiere Terrain Generator
+	terrainGenerator = new TerrainGenerator();
+	
+	// NEUES TERRAIN-SYSTEM: Größeres Terrain mit Fortschrittsanzeige
+	std::cout << "Starte Terrain-Generierung..." << std::endl;
+	terrainGenerationInProgress = true;
+	
+	TerrainConfig config;
+	config.sizeX = 128;  // 128 Blöcke in X-Richtung (64 auf jeder Seite)
+	config.sizeZ = 128;  // 128 Blöcke in Z-Richtung
+	config.scale = 0.03f;  // Größere Features
+	config.heightMultiplier = 20.0f;  // Höhere Berge
+	config.minHeight = -10;  // Tiefere Täler
+	config.generateCaves = false;  // Höhlen vorerst deaktiviert für Performance
+	
+	// Progress-Callback für UI-Updates
+	auto progressCallback = [](float progress, const std::string& message) {
+		terrainGenerationProgress = progress;
+		terrainGenerationMessage = message;
+		std::cout << "Terrain: " << (int)(progress * 100) << "% - " << message << std::endl;
+	};
+	
+	// Generiere Terrain (gebatched für bessere Performance)
+	terrainGenerator->generateTerrainBatched(voxelWorld, config, progressCallback, 512);
+	
+	terrainGenerationInProgress = false;
+	terrainGenerated = true;
+	std::cout << "Terrain-Generierung abgeschlossen!" << std::endl;
+	
+	/* ALTE METHODE - Auskommentiert
 	// Erstelle Voxel-Terrain
 	createVoxelTerrain(voxelWorld, 16, 0.1f, 8.0f);
 	
@@ -227,6 +265,7 @@ int main()
 	
 	// Aktualisiere alle Chunk-Meshes
 	voxelWorld->updateAllChunks();
+	*/
 
 	// lighting info (für Physics-Objekte)
 	glm::vec3 lightPos(10.0f, 10.0f, 10.0f);
@@ -356,6 +395,19 @@ int main()
 		ImGui::ColorEdit3("Ambient Color", (float*)&ambientColor);
 		
 		ImGui::Separator();
+		ImGui::Text("Terrain Generation");
+		if (terrainGenerationInProgress) {
+			ImGui::ProgressBar(terrainGenerationProgress, ImVec2(-1, 0));
+			ImGui::Text("%s", terrainGenerationMessage.c_str());
+		} else if (terrainGenerated) {
+			ImGui::Text("Terrain: Complete");
+			if (ImGui::Button("Regenerate Terrain")) {
+				// TODO: Regeneriere Terrain in separatem Thread
+				std::cout << "Terrain-Regenerierung noch nicht implementiert" << std::endl;
+			}
+		}
+		
+		ImGui::Separator();
 		ImGui::Text("Block Targeting");
 		if (hasTargetBlock) {
 			ImGui::Text("Target Block: (%d, %d, %d)", 
@@ -385,6 +437,11 @@ int main()
 	ImGui::DestroyContext();
 
 	// Cleanup
+	if (terrainGenerator) {
+		delete terrainGenerator;
+		terrainGenerator = nullptr;
+	}
+	
 	if (blockOutline) {
 		delete blockOutline;
 		blockOutline = nullptr;
