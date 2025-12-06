@@ -3256,9 +3256,19 @@
     <None Include="docs\CameraPathRecorder_Debug.md" />
     <None Include="docs\CameraPathRecorder_QuickFix.md" />
     <None Include="docs\CameraPathRecorder_FixSummary.md" />
+    <None Include="shaders\voxel_wobble.geom" />
+    <None Include="shaders\voxel_wobble.vert" />
+    <None Include="shaders\voxel_wobble.frag" />
+    <None Include="shaders\voxel_wobble_advanced.geom" />
+    <None Include="docs\GeometryShaderWobble.md" />
+    <None Include="docs\MutexDeadlockFix.md" />
+    <None Include="docs\TerrainRegenerationFix.md" />
+    <None Include="docs\CameraSpawnPositionFix.md" />
+    <None Include="docs\CodeCleanupAndCameraFix.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="src\CMakeLists.txt" />
+    <Text Include="docs\GeometryShaderWobble_Integration.txt" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="resources\textures\atlas.png">

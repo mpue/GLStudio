@@ -178,26 +178,27 @@ void VoxelWorld::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
 		}
 		else {
 			// Normaler Modus: Sofort updaten (wie vorher)
-			updateChunkMesh(chunkCoord.x, chunkCoord.y, chunkCoord.z);
+			// Use internal version that doesn't lock (we already hold the lock)
+			updateChunkMeshInternal(chunkCoord.x, chunkCoord.y, chunkCoord.z);
 
 			// Update angrenzende Chunks bei Randblöcken
 			if (localCoord.x == 0) {
-				updateChunkMesh(chunkCoord.x - 1, chunkCoord.y, chunkCoord.z);
+				updateChunkMeshInternal(chunkCoord.x - 1, chunkCoord.y, chunkCoord.z);
 			}
 			if (localCoord.x == VoxelChunk::CHUNK_SIZE - 1) {
-				updateChunkMesh(chunkCoord.x + 1, chunkCoord.y, chunkCoord.z);
+				updateChunkMeshInternal(chunkCoord.x + 1, chunkCoord.y, chunkCoord.z);
 			}
 			if (localCoord.y == 0) {
-				updateChunkMesh(chunkCoord.x, chunkCoord.y - 1, chunkCoord.z);
+				updateChunkMeshInternal(chunkCoord.x, chunkCoord.y - 1, chunkCoord.z);
 			}
 			if (localCoord.y == VoxelChunk::CHUNK_SIZE - 1) {
-				updateChunkMesh(chunkCoord.x, chunkCoord.y + 1, chunkCoord.z);
+				updateChunkMeshInternal(chunkCoord.x, chunkCoord.y + 1, chunkCoord.z);
 			}
 			if (localCoord.z == 0) {
-				updateChunkMesh(chunkCoord.x, chunkCoord.y, chunkCoord.z - 1);
+				updateChunkMeshInternal(chunkCoord.x, chunkCoord.y, chunkCoord.z - 1);
 			}
 			if (localCoord.z == VoxelChunk::CHUNK_SIZE - 1) {
-				updateChunkMesh(chunkCoord.x, chunkCoord.y, chunkCoord.z + 1);
+				updateChunkMeshInternal(chunkCoord.x, chunkCoord.y, chunkCoord.z + 1);
 			}
 		}
 	}
@@ -218,8 +219,25 @@ BlockType VoxelWorld::getBlock(int worldX, int worldY, int worldZ) const {
 }
 
 void VoxelWorld::updateChunkMesh(int chunkX, int chunkY, int chunkZ) {
-	// Zuerst: Sammle alle Daten während Lock gehalten wird
-	VoxelChunk* chunk = nullptr;
+	std::lock_guard<std::mutex> lock(chunkMutex); // Thread-Safety!
+	updateChunkMeshInternal(chunkX, chunkY, chunkZ);
+}
+
+void VoxelWorld::updateChunkMeshInternal(int chunkX, int chunkY, int chunkZ) {
+	// Internal version - assumes caller holds chunkMutex lock!
+	
+	glm::ivec3 coord(chunkX, chunkY, chunkZ);
+	auto it = chunks.find(coord);
+	if (it == chunks.end()) {
+		return;
+	}
+	
+	VoxelChunk* chunk = it->second.get();
+	if (!chunk) {
+		return;
+	}
+
+	// Hole Nachbar-Chunks
 	VoxelChunk* north = nullptr;
 	VoxelChunk* south = nullptr;
 	VoxelChunk* east = nullptr;
@@ -228,61 +246,45 @@ void VoxelWorld::updateChunkMesh(int chunkX, int chunkY, int chunkZ) {
 	VoxelChunk* bottom = nullptr;
 	
 	{
-		std::lock_guard<std::mutex> lock(chunkMutex); // Thread-Safety!
-		
-		glm::ivec3 coord(chunkX, chunkY, chunkZ);
-		auto it = chunks.find(coord);
-		if (it == chunks.end()) {
-			return;
-		}
-		
-		chunk = it->second.get();
-		if (!chunk) {
-			return;
-		}
-
-		// Hole Nachbar-Chunks (nur Pointer sammeln, keine Kopien)
-		{
-			glm::ivec3 northCoord(chunkX, chunkY, chunkZ + 1);
-			auto northIt = chunks.find(northCoord);
-			if (northIt != chunks.end()) north = northIt->second.get();
-		}
-		{
-			glm::ivec3 southCoord(chunkX, chunkY, chunkZ - 1);
-			auto southIt = chunks.find(southCoord);
-			if (southIt != chunks.end()) south = southIt->second.get();
-		}
-		{
-			glm::ivec3 eastCoord(chunkX + 1, chunkY, chunkZ);
-			auto eastIt = chunks.find(eastCoord);
-			if (eastIt != chunks.end()) east = eastIt->second.get();
-		}
-		{
-			glm::ivec3 westCoord(chunkX - 1, chunkY, chunkZ);
-			auto westIt = chunks.find(westCoord);
-			if (westIt != chunks.end()) west = westIt->second.get();
-		}
-		{
-			glm::ivec3 topCoord(chunkX, chunkY + 1, chunkZ);
-			auto topIt = chunks.find(topCoord);
-			if (topIt != chunks.end()) top = topIt->second.get();
-		}
-		{
-			glm::ivec3 bottomCoord(chunkX, chunkY - 1, chunkZ);
-			auto bottomIt = chunks.find(bottomCoord);
-			if (bottomIt != chunks.end()) bottom = bottomIt->second.get();
-		}
-		
-		// Generiere Mesh INNERHALB des Locks (reine CPU-Arbeit)
-		chunk->generateMeshWithNeighbors(north, south, east, west, top, bottom);
-		
-	} // Lock wird hier freigegeben!
-	
-	// WICHTIG: setupOpenGL() AUSSERHALB des Locks!
-	// OpenGL-Calls dürfen NICHT innerhalb eines Mutex gehalten werden
-	if (chunk) {
-		chunk->setupOpenGL();
+		glm::ivec3 northCoord(chunkX, chunkY, chunkZ + 1);
+		auto northIt = chunks.find(northCoord);
+		if (northIt != chunks.end()) north = northIt->second.get();
 	}
+	{
+		glm::ivec3 southCoord(chunkX, chunkY, chunkZ - 1);
+		auto southIt = chunks.find(southCoord);
+		if (southIt != chunks.end()) south = southIt->second.get();
+	}
+	{
+		glm::ivec3 eastCoord(chunkX + 1, chunkY, chunkZ);
+		auto eastIt = chunks.find(eastCoord);
+		if (eastIt != chunks.end()) east = eastIt->second.get();
+	}
+	{
+		glm::ivec3 westCoord(chunkX - 1, chunkY, chunkZ);
+		auto westIt = chunks.find(westCoord);
+		if (westIt != chunks.end()) west = westIt->second.get();
+	}
+	{
+		glm::ivec3 topCoord(chunkX, chunkY + 1, chunkZ);
+		auto topIt = chunks.find(topCoord);
+		if (topIt != chunks.end()) top = topIt->second.get();
+	}
+	{
+		glm::ivec3 bottomCoord(chunkX, chunkY - 1, chunkZ);
+		auto bottomIt = chunks.find(bottomCoord);
+		if (bottomIt != chunks.end()) bottom = bottomIt->second.get();
+	}
+
+	// Generiere Mesh MIT Lock (CPU-Arbeit)
+	chunk->generateMeshWithNeighbors(north, south, east, west, top, bottom);
+	
+	// setupOpenGL() auch MIT Lock!
+	// Dies ist sicher, weil:
+	// 1. OpenGL-Calls werden nur vom Haupt-Thread aufgerufen
+	// 2. updateChunkMesh wird nur vom Haupt-Thread aufgerufen (nach Terrain-Gen)
+	// 3. Andere Threads rufen nur getBlock() auf (read-only)
+	chunk->setupOpenGL();
 }
 
 void VoxelWorld::updateAllChunks() {

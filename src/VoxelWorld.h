@@ -28,7 +28,7 @@ public:
 
 	// NEUE BATCH-MODI
 	void beginBatchUpdate();  // Deaktiviert Auto-Mesh-Updates
-	void endBatchUpdate();    // Aktualisiert nur betroffene Chunks
+	void endBatchUpdate(); // Aktualisiert nur betroffene Chunks
 
 	// Mesh-Aktualisierung
 	void updateChunkMesh(int chunkX, int chunkY, int chunkZ);
@@ -49,6 +49,9 @@ public:
 private:
 	VoxelChunk* getChunk(int chunkX, int chunkY, int chunkZ);
 	VoxelChunk* getOrCreateChunk(int chunkX, int chunkY, int chunkZ);
+
+	// Internal unlocked versions (assumes caller holds lock)
+	void updateChunkMeshInternal(int chunkX, int chunkY, int chunkZ);
 
 	// NEU: Tracking für Batch-Modus
 	bool batchMode = false;

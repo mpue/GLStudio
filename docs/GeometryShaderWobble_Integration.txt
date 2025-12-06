@@ -1,0 +1,2 @@
+// Dieses File ist DOKUMENTATION - nicht kompilieren!
+// Siehe GeometryShaderWobble.md für Details

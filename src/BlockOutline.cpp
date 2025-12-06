@@ -76,19 +76,20 @@ void BlockOutline::renderOutline(const glm::ivec3& blockPos, const glm::mat4& pr
     }
 
     // Erstelle Model-Matrix
+    // Block-Koordinaten sind bereits zentriert (Block bei (x,y,z) reicht von x-0.5 bis x+0.5)
     glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(blockPos) + glm::vec3(0.5f));
-    model = glm::scale(model, glm::vec3(1.005f)); // Leicht größer für sichtbare Outline
+    model = glm::translate(model, glm::vec3(blockPos));
+  model = glm::scale(model, glm::vec3(1.005f)); // Leicht größer für sichtbare Outline
 
     // Konfiguriere Render-State
-    glLineWidth(3.0f);
+glLineWidth(3.0f);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST); // Outline immer sichtbar
     
     // Setze Shader-Uniforms
     shader->use();
-    shader->setMat4("projection", projection);
+ shader->setMat4("projection", projection);
     shader->setMat4("view", view);
     shader->setMat4("model", model);
     shader->setVec3("outlineColor", color);

@@ -14,6 +14,10 @@ public:
     void update(float deltaTime);
     void onMouseMove(double dx, double dy);
     
+    // World Management
+    void setVoxelWorld(VoxelWorld* world) { voxelWorld = world; }
+    void setPosition(const glm::vec3& pos) { position = pos; }
+    
     // Getters
     glm::vec3 getPosition() const { return position; }
     glm::vec3 getFront() const { return front; }

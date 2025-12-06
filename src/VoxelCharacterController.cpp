@@ -63,14 +63,21 @@ void VoxelCharacterController::onMouseMove(double dx, double dy) {
 }
 
 bool VoxelCharacterController::isBlockSolid(int x, int y, int z) {
-  BlockType type = voxelWorld->getBlock(x, y, z);
+    if (!voxelWorld) {
+        return false; // Safety check
+    }
+    BlockType type = voxelWorld->getBlock(x, y, z);
     return type != BlockType::Air;
 }
 
 bool VoxelCharacterController::checkCollision(const glm::vec3& newPos) {
+    if (!voxelWorld) {
+        return false; // Safety check
+    }
+    
     // Prüfe Blöcke um die Charakterposition mit kleinerer, präziserer Collision Box
-// Reduziere radius leicht für weniger "Hängenbleiben"
-    float effectiveRadius = radius * 0.9f;  // 10% kleiner für glattere Bewegung
+    // Reduziere radius leicht für weniger "Hängenbleiben"
+  float effectiveRadius = radius * 0.9f;  // 10% kleiner für glattere Bewegung
     
     int minX = static_cast<int>(std::floor(newPos.x - effectiveRadius));
     int maxX = static_cast<int>(std::ceil(newPos.x + effectiveRadius));
@@ -79,14 +86,14 @@ bool VoxelCharacterController::checkCollision(const glm::vec3& newPos) {
     int minZ = static_cast<int>(std::floor(newPos.z - effectiveRadius));
     int maxZ = static_cast<int>(std::ceil(newPos.z + effectiveRadius));
     
-    for (int x = minX; x <= maxX; ++x) {
+  for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
-   for (int z = minZ; z <= maxZ; ++z) {
-        if (isBlockSolid(x, y, z)) {
-    return true;
-    }
-  }
-   }
+            for (int z = minZ; z <= maxZ; ++z) {
+                if (isBlockSolid(x, y, z)) {
+          return true;
+        }
+     }
+        }
     }
     
     return false;

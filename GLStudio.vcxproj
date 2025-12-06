@@ -1073,10 +1073,15 @@
     <None Include="docs\CameraPathRecorder_FixSummary.md" />
     <None Include="docs\CameraPathRecorder_QuickFix.md" />
     <None Include="docs\CameraPathRecorder_QuickStart.md" />
+    <None Include="docs\CameraSpawnPositionFix.md" />
+    <None Include="docs\CodeCleanupAndCameraFix.md" />
+    <None Include="docs\GeometryShaderWobble.md" />
     <None Include="docs\MeshUpdatePerformanceFix.md" />
+    <None Include="docs\MutexDeadlockFix.md" />
     <None Include="docs\ParallelTerrainGeneration.md" />
     <None Include="docs\PerformanceOptimierung.md" />
     <None Include="docs\TerrainGenerator.md" />
+    <None Include="docs\TerrainRegenerationFix.md" />
     <None Include="docs\TextureAtlas.md" />
     <None Include="docs\ThreadOptimization.md" />
     <None Include="docs\VoxelCharacterController.md" />
@@ -1230,8 +1235,13 @@
     <None Include="shaders\outline.vert" />
     <None Include="shaders\voxel.frag" />
     <None Include="shaders\voxel.vert" />
+    <None Include="shaders\voxel_wobble.frag" />
+    <None Include="shaders\voxel_wobble.geom" />
+    <None Include="shaders\voxel_wobble.vert" />
+    <None Include="shaders\voxel_wobble_advanced.geom" />
   </ItemGroup>
   <ItemGroup>
+    <Text Include="docs\GeometryShaderWobble_Integration.txt" />
     <Text Include="src\CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>

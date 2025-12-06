@@ -63,6 +63,7 @@ std::mutex voxelWorldMutex;
 std::atomic<VoxelWorld*> voxelWorld{nullptr};
 
 VoxelCharacterController* characterController;
+std::mutex characterControllerMutex; // NEU: Für Thread-Safety beim Weltaustausch
 
 // Voxel lighting settings
 glm::vec3 sunDirection = glm::normalize(glm::vec3(0.5f, -1.0f, 0.3f)); // Sonne scheint schräg von oben
@@ -252,7 +253,7 @@ int main()
 	config.lacunarity = 2.0f;
 	config.continentalnessScale = 0.01f;
 	config.erosionScale = 0.03f;
-	config.mountainScale = 0.02f;
+	config.mountainScale = 0.04f;
 	config.mountainThreshold = 0.6f;
 	config.mountainHeightMultiplier = 2.5f;
 	config.caveScale = 0.05f;
@@ -306,6 +307,32 @@ int main()
 	VoxelWorld* worldForController = voxelWorld.load(std::memory_order_acquire);
 	characterController = new VoxelCharacterController(worldForController, window);
 	
+	// Finde eine gute Spawn-Position im initialen Terrain
+	if (worldForController) {
+		int centerX = 0;
+		int centerZ = 0;
+		int spawnY = 100;
+		
+		// Suche nach dem höchsten Block in der Mitte
+		for (int y = 100; y >= -50; y--) {
+			BlockType block = worldForController->getBlock(centerX, y, centerZ);
+			if (block != BlockType::Air) {
+				spawnY = y + 3; // 3 Blöcke über dem Boden spawnen
+				break;
+			}
+		}
+		
+		glm::vec3 spawnPos(static_cast<float>(centerX), static_cast<float>(spawnY), static_cast<float>(centerZ));
+		characterController->setPosition(spawnPos);
+		std::cout << "Initial spawn position: (" << spawnPos.x << ", " << spawnPos.y << ", " << spawnPos.z << ")" << std::endl;
+		
+		// WICHTIG: Initialisiere auch die Kamera sofort!
+		camera.Position = spawnPos + glm::vec3(0.0f, 1.6f, 0.0f);
+		camera.Front = characterController->getFront();
+		camera.Up = characterController->getUp();
+		camera.Zoom = 45.0f;
+	}
+
 	// Initialisiere Block Outline Renderer
 	blockOutline = new BlockOutline();
 	blockOutline->init("shaders/outline.vert", "shaders/outline.frag");
@@ -334,51 +361,63 @@ int main()
 		ImGui::NewFrame();
 
 		// Update Character Controller nur wenn NICHT im Playback
+		glm::vec3 camPos, camFront, camUp;
+		bool hasCharacterController = false;
+		
 		if (!cameraPathRecorder || !cameraPathRecorder->isPlaying()) {
-			characterController->update(deltaTime);
+			std::lock_guard<std::mutex> lock(characterControllerMutex);
+			if (characterController) {
+			(characterController)->update(deltaTime);
+				camPos = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+				camFront = characterController->getFront();
+				camUp = characterController->getUp();
+				hasCharacterController = true;
+			}
 		}
 		
 		// Update Camera Path Recorder
 		if (cameraPathRecorder) {
-			if (cameraPathRecorder->isRecording() && characterController->isFreeFlyMode()) {
-				// Zeichne Kameraposition auf im Free Fly Modus
-				glm::vec3 camPos = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
-				cameraPathRecorder->updateRecording(camPos, characterController->getFront(), characterController->getUp(), deltaTime);
+			if (cameraPathRecorder->isRecording() && hasCharacterController) {
+				std::lock_guard<std::mutex> lock(characterControllerMutex);
+				if (characterController && characterController->isFreeFlyMode()) {
+					glm::vec3 recPos = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+					cameraPathRecorder->updateRecording(recPos, characterController->getFront(), characterController->getUp(), deltaTime);
+				}
 			}
 			
 			if (cameraPathRecorder->isPlaying()) {
-				// Spiele aufgezeichneten Pfad ab
 				glm::vec3 playbackPos, playbackFront, playbackUp;
 				if (cameraPathRecorder->updatePlayback(playbackPos, playbackFront, playbackUp, deltaTime)) {
-					// Überschreibe Kamera-Position mit Playback-Daten
 					camera.Position = playbackPos;
 					camera.Front = playbackFront;
 					camera.Up = playbackUp;
+					hasCharacterController = false;
 				}
 			}
 		}
 
 		// Update target block (für Visualisierung) - THREAD-SICHER
 		VoxelWorld* worldForRaycast = voxelWorld.load(std::memory_order_acquire);
-		if (worldForRaycast && (!cameraPathRecorder || !cameraPathRecorder->isPlaying())) {
-			// Nur Target Block berechnen wenn nicht im Playback
-			glm::vec3 rayOrigin = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
-			glm::vec3 rayDirection = characterController->getFront();
-			currentTargetBlock = VoxelRaycast::raycast(rayOrigin, rayDirection, 5.0f, worldForRaycast);
-			hasTargetBlock = currentTargetBlock.hit;
+		if (worldForRaycast && hasCharacterController && (!cameraPathRecorder || !cameraPathRecorder->isPlaying())) {
+			std::lock_guard<std::mutex> lock(characterControllerMutex);
+			if (characterController) {
+				glm::vec3 rayOrigin = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+				glm::vec3 rayDirection = characterController->getFront();
+				currentTargetBlock = VoxelRaycast::raycast(rayOrigin, rayDirection, 5.0f, worldForRaycast);
+				hasTargetBlock = currentTargetBlock.hit;
+			}
 		}
 
 		// render
-		// ----__
+		// ------
 		glClearColor(0.5f, 0.5f, 0.8f, 1.0f); // Sky color
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// Überschreibe Kamera nur wenn NICHT im Playback-Modus
-		if (!cameraPathRecorder || !cameraPathRecorder->isPlaying()) {
-			// Update Kamera basierend auf Character Controller
-			camera.Position = characterController->getPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
-			camera.Front = characterController->getFront();
-			camera.Up = characterController->getUp();
+		// Update Kamera mit lokalen Kopien (Thread-Safe!)
+		if (hasCharacterController && (!cameraPathRecorder || !cameraPathRecorder->isPlaying())) {
+			camera.Position = camPos;
+			camera.Front = camFront;
+			camera.Up = camUp;
 		}
 		camera.Zoom = 45.0f;
 		
@@ -409,12 +448,49 @@ int main()
 		
 		// === Render Block Outlines ===
 		if (hasTargetBlock && blockOutline) {
-			blockOutline->renderDualOutline(
-				currentTargetBlock.blockPos,   // Rot: Block zum Löschen
-				currentTargetBlock.placePos,   // Grün: Position für neuen Block
-				projection,
-				view
-			);
+			// Zeige BEIDE Outlines gleichzeitig für maximale Klarheit:
+			// ROT = Block der gelöscht werden kann (Mittelklick)
+			// GRÜN = Position wo Block platziert wird (Linksklick)
+			
+			VoxelWorld* worldForOutline = voxelWorld.load(std::memory_order_acquire);
+			if (worldForOutline) {
+				// Prüfe ob an blockPos ein Block existiert
+				BlockType blockAtTarget = worldForOutline->getBlock(
+					currentTargetBlock.blockPos.x, 
+					currentTargetBlock.blockPos.y, 
+					currentTargetBlock.blockPos.z
+				);
+				
+				// Rote Outline: Zeige NUR wenn ein Block existiert (kann gelöscht werden)
+				if (blockAtTarget != BlockType::Air) {
+					blockOutline->renderOutline(
+						currentTargetBlock.blockPos,
+						projection,
+						view,
+						glm::vec3(1.0f, 0.2f, 0.2f),  // Rot
+						0.8f
+					);
+				}
+				
+				// Grüne Outline: Zeige NUR wenn placePos leer ist (Block kann platziert werden)
+				if (currentTargetBlock.placePos != currentTargetBlock.blockPos) {
+					BlockType blockAtPlace = worldForOutline->getBlock(
+						currentTargetBlock.placePos.x,
+						currentTargetBlock.placePos.y,
+						currentTargetBlock.placePos.z
+					);
+					
+					if (blockAtPlace == BlockType::Air) {
+						blockOutline->renderOutline(
+							currentTargetBlock.placePos,
+							projection,
+							view,
+							glm::vec3(0.2f, 1.0f, 0.2f),  // Grün
+							0.6f  // Etwas transparenter
+						);
+					}
+				}
+			}
 		}
 
 		// === Optional: Render Physics-Objekte mit Schatten (falls noch benötigt) ===
@@ -613,6 +689,34 @@ int main()
 						// ATOMARER Austausch der Welten - SICHER!
 						VoxelWorld* oldWorld = voxelWorld.exchange(newWorld, std::memory_order_acq_rel);
 						
+						// WICHTIG: Character Controller aktualisieren - THREAD-SICHER!
+						{
+							std::lock_guard<std::mutex> lock(characterControllerMutex);
+							if (characterController) {
+								characterController->setVoxelWorld(newWorld);
+								
+								// Finde eine gute Spawn-Position im neuen Terrain
+								// Suche in der Mitte des generierten Terrains nach festem Boden
+								int centerX = 0;
+								int centerZ = 0;
+								int spawnY = 100; // Start von oben
+								
+								// Suche nach dem höchsten Block in der Mitte
+								for (int y = 100; y >= -50; y--) {
+									BlockType block = newWorld->getBlock(centerX, y, centerZ);
+									if (block != BlockType::Air) {
+										spawnY = y + 3; // 3 Blöcke über dem Boden spawnen
+										break;
+									}
+								}
+								
+								// Setze Character Controller Position
+								glm::vec3 spawnPos(static_cast<float>(centerX), static_cast<float>(spawnY), static_cast<float>(centerZ));
+								characterController->setPosition(spawnPos);
+								std::cout << "Spawning player at: (" << spawnPos.x << ", " << spawnPos.y << ", " << spawnPos.z << ")" << std::endl;
+							}
+						}
+						
 						// Warte ein bisschen, damit Render-Thread umschaltet
 						std::this_thread::sleep_for(std::chrono::milliseconds(100));
 						
@@ -777,7 +881,7 @@ int main()
 	
 	if (characterController) {
 		delete characterController;
-		characterController = nullptr;
+	 characterController = nullptr;
 	}
 	
 	VoxelWorld* worldForCleanup = voxelWorld.exchange(nullptr, std::memory_order_acq_rel);
@@ -937,23 +1041,24 @@ void processInput(GLFWwindow* window)
     // Toggle Free Fly Mode mit F-Taste
     static bool fKeyPressed = false;
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS && !fKeyPressed) {
-    fKeyPressed = true;
-        if (characterController) {
-   characterController->toggleFreeFlyMode();
-    
-          // Cursor-Modus anpassen
-   if (characterController->isFreeFlyMode()) {
-  // Free Fly aktiviert - Cursor sichtbar für UI
+        fKeyPressed = true;
+        std::lock_guard<std::mutex> lock(characterControllerMutex);
+    if (characterController) {
+            characterController->toggleFreeFlyMode();
+ 
+            // Cursor-Modus anpassen
+        if (characterController->isFreeFlyMode()) {
+   // Free Fly aktiviert - Cursor sichtbar für UI
               glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-         } else {
-  // Normal Mode - Cursor versteckt
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-          }
+    } else {
+                // Normal Mode - Cursor versteckt
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+     }
         }
     }
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE) {
-        fKeyPressed = false;
-    }
+      fKeyPressed = false;
+ }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -977,16 +1082,17 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
     lastX = xpos; 
     lastY = ypos;
     
-if (characterController) {
-        // Im Free Fly Modus nur bei gedrückter rechter Maustaste
-if (characterController->isFreeFlyMode()) {
-   if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-    characterController->onMouseMove(dx, dy);
-      }
-} else {
-  // Normal Mode - immer aktiv
+    std::lock_guard<std::mutex> lock(characterControllerMutex);
+    if (characterController) {
+      // Im Free Fly Modus nur bei gedrückter rechter Maustaste
+        if (characterController->isFreeFlyMode()) {
+      if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
       characterController->onMouseMove(dx, dy);
-  }
+        }
+        } else {
+          // Normal Mode - immer aktiv
+            characterController->onMouseMove(dx, dy);
+    }
     }
 }
 
